@@ -15,8 +15,9 @@ const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…`
 const tone = (p: number) => (p >= 85 ? '#e5484d' : p >= 65 ? '#f0a43a' : '#d97757')
 
 const STYLE = `<style>
-.card{fill:#fbfaf7;stroke:#e8e4da}.t1{fill:#26241f}.t2{fill:#7b776d}.trkf{fill:#ece8df}.div{stroke:#ebe7de}.lockbg{fill:#f3efe6}
-@media (prefers-color-scheme: dark){.card{fill:#262522;stroke:#3a3833}.t1{fill:#efede7}.t2{fill:#a29e94}.trkf{fill:#3a3833}.div{stroke:#3a3833}.lockbg{fill:#34322d}}
+.card{fill:#fbfaf7;stroke:#e6e1d6}.t1{fill:#26241f}.t2{fill:#6f6b62}.trkf{fill:#ebe6dc}.div{stroke:#e6e1d6}
+@media (prefers-color-scheme: dark){.card{fill:#262522;stroke:#38362f}.t1{fill:#efede7}.t2{fill:#a8a49a}.trkf{fill:#3a3833}.div{stroke:#38362f}}
+.num{font-variant-numeric:tabular-nums}
 .eye{transform-box:fill-box;transform-origin:center;animation:blink 4s infinite}
 .bob{animation:bob 1.2s ease-in-out infinite}.tap{animation:tap .3s steps(1) infinite}
 .d1,.d2,.d3{animation:dot 1.2s infinite}.d2{animation-delay:.2s}.d3{animation-delay:.4s}
@@ -51,29 +52,31 @@ const robot = (x: number, y: number, pose: Pose, u = 4) => {
 const lockIcon = (x: number, y: number) => `<g transform="translate(${x} ${y})" fill="none" stroke="#d97757" stroke-width="1.6" stroke-linecap="round">
 <rect x="0.8" y="5" width="9.4" height="7.4" rx="2" fill="#d97757" stroke="none"/><path d="M2.8 5V3.4a2.7 2.7 0 0 1 5.4 0V5"/></g>`
 
+// One usage row on a baseline: label, a thin bar, the percent right-aligned in tabular digits, then when it resets.
 const bar = (y: number, m: Meter) => {
   const p = Math.max(0, Math.min(100, m.pct ?? 0))
-  const fill = m.pct === undefined || p === 0 ? '' : `<rect x="438" y="${y}" width="${Math.max(6, p * 0.92).toFixed(1)}" height="9" rx="4.5" fill="${tone(p)}"/>`
-  return `<text class="t1" x="334" y="${y + 8}" font-size="12.5" font-weight="600" ${FONT}>${esc(m.label)}</text>
-<rect class="trkf" x="438" y="${y}" width="92" height="9" rx="4.5"/>${fill}
-<text class="t1" x="540" y="${y + 8.5}" font-size="12" font-weight="700" ${FONT}>${m.pct === undefined ? '…' : `${Math.round(p)}%`}</text>
-<text class="t2" x="578" y="${y + 8.5}" font-size="11" ${FONT}>${esc(clip(m.sub, 26))}</text>`
+  const fill = m.pct === undefined || p === 0 ? '' : `<rect x="432" y="${y - 8}" width="${Math.max(6, p).toFixed(1)}" height="6" rx="3" fill="${tone(p)}"/>`
+  return `<text class="t2" x="334" y="${y}" font-size="12" font-weight="500" ${FONT}>${esc(m.label)}</text>
+<rect class="trkf" x="432" y="${y - 8}" width="100" height="6" rx="3"/>${fill}
+<text class="t1 num" x="574" y="${y}" text-anchor="end" font-size="12.5" font-weight="600" ${FONT}>${m.pct === undefined ? '…' : `${Math.round(p)}%`}</text>
+<text class="t2 num" x="586" y="${y}" font-size="11.5" ${FONT}>${esc(clip(m.sub, 22))}</text>`
 }
 
 export const bannerSvg = (chip: Chip, session: Meter, week: Meter, tokens: string, pose: Pose = 'idle') => {
-  const sub = chip.locked ? `${lockIcon(96, 38)}<text class="t2" x="111" y="49" font-size="11.5" ${FONT}>${esc(clip(chip.sub, 32))}</text>`
-    : `<text class="t2" x="96" y="49" font-size="11.5" ${FONT}>${esc(clip(chip.sub, 34))}</text>`
-  const extra = chip.extra ? `<rect x="${96 + Math.min(150, chip.title.length * 8.4) + 8}" y="19" width="78" height="18" rx="9" fill="#f0a43a" opacity=".18"/>
-<text x="${96 + Math.min(150, chip.title.length * 8.4) + 47}" y="32" text-anchor="middle" font-size="10.5" font-weight="700" fill="#c9821c" ${FONT}>⚡ extra effort</text>` : ''
+  const sub = chip.locked ? `${lockIcon(96, 39)}<text class="t2" x="111" y="50" font-size="12" ${FONT}>${esc(clip(chip.sub, 30))}</text>`
+    : `<text class="t2" x="96" y="50" font-size="12" ${FONT}>${esc(clip(chip.sub, 32))}</text>`
+  const titleW = Math.min(150, chip.title.length * 8.6)
+  const extra = chip.extra ? `<rect x="${96 + titleW + 10}" y="19" width="76" height="18" rx="9" fill="#d97757" opacity=".14"/>
+<text x="${96 + titleW + 48}" y="31.5" text-anchor="middle" font-size="11" font-weight="600" fill="#c2643f" ${FONT}>Extra effort</text>` : ''
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${STYLE}
-<rect class="card" x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="16"/>
+<rect class="card" x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="14"/>
 ${robot(12, 24, pose)}
-<text class="t1" x="96" y="32" font-size="14.5" font-weight="700" ${FONT}>${esc(clip(chip.title, 20))}</text>${extra}
+<text class="t1" x="96" y="32" font-size="15" font-weight="600" letter-spacing="-0.15" ${FONT}>${esc(clip(chip.title, 20))}</text>${extra}
 ${sub}
-<line class="div" x1="318" y1="12" x2="318" y2="60" stroke-width="1"/>
-${bar(14, session)}
-${bar(34, week)}
-<text class="t2" x="334" y="62" font-size="11" ${FONT}>${esc(clip(tokens, 60))}</text>
+<line class="div" x1="318" y1="14" x2="318" y2="58" stroke-width="1"/>
+${bar(24, session)}
+${bar(42, week)}
+<text class="t2 num" x="334" y="60" font-size="11.5" ${FONT}>${esc(clip(tokens, 60))}</text>
 </svg>`
 }
 
@@ -112,23 +115,4 @@ export const tokenText = (life: number | undefined) => {
   return `Lifetime ${f(life)} tokens`
 }
 
-// ---------- The settings gear: native buttons cannot animate, so for GEAR_MS a drawing stands in for the gear and
-// the effort row. The gear turns counter-clockwise as the row slides out of it to the left, and back on close.
-export const GEAR_MS = 320
-export const gearSvg = (dir: 'open' | 'close', max: string) => {
-  const labels = ['Max effort:', ...L.EFFORTS.map(e => (e === max ? `● ${e}` : e))]
-  let x = 0
-  const texts = labels.map(l => { const t = `<text class="t" x="${x}" y="15">${esc(l)}</text>`; x += l.length * 7 + 10; return t }).join('')
-  const W = x + 24, from = `translateX(${x}px) scaleX(.15)`
-  const [a, b] = dir === 'open' ? [`transform:${from};opacity:0`, 'transform:none;opacity:1'] : ['transform:none;opacity:1', `transform:${from};opacity:0`]
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="22" viewBox="0 0 ${W} 22">
-<style>.t{fill:#7b776d;font-size:13px;font-family:Segoe UI Variable,Segoe UI,system-ui,-apple-system,sans-serif}.g{fill:#26241f;font-size:16px}
-@media (prefers-color-scheme: dark){.t{fill:#a29e94}.g{fill:#efede7}}
-.row{transform-origin:${x}px 11px;animation:row ${GEAR_MS}ms cubic-bezier(.2,.8,.2,1) forwards}
-.gear{transform-box:fill-box;transform-origin:center;animation:gear ${GEAR_MS}ms cubic-bezier(.2,.8,.2,1) forwards}
-@keyframes row{from{${a}}to{${b}}}
-@keyframes gear{from{transform:rotate(${dir === 'open' ? 0 : -90}deg)}to{transform:rotate(${dir === 'open' ? -90 : 0}deg)}}
-@media (prefers-reduced-motion: reduce){*{animation-duration:1ms!important}}
-</style><clipPath id="c"><rect width="${x}" height="22"/></clipPath>
-<g clip-path="url(#c)"><g class="row">${texts}</g></g><text class="g gear" x="${W - 12}" y="16" text-anchor="middle">⚙</text></svg>`
-}
+

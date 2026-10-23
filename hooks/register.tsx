@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { ApTodo, ApView } from '../types'
-import { bannerSvg, chipOf, GEAR_MS, gearSvg, meterOf, routeLine, tokenText, usageText } from './banner'
+import { bannerSvg, chipOf, meterOf, routeLine, tokenText, usageText } from './banner'
 import * as L from './logic'
 
 type $T = EngineInterface
@@ -251,7 +251,8 @@ export const register: Register = on => {
       baseCtx = Number((await $.store.get('base')) ?? baseCtx)
       const mode = ((await $.store.get('mode')) ?? 'auto') as ApView['mode']
       const maxEffort = ((await $.store.get('maxEffort')) ?? undefined) as string | undefined
-      await update($, view, v => ({ ...v, mode, maxEffort }))
+      const off = (await $.store.get('off')) === true
+      await update($, view, v => ({ ...v, mode, maxEffort, off }))
       await $.command.register({ name: 'route', description: 'Autopilot model routing', argumentHint: 'auto|opus|sonnet|off' })
       await $.command.register({ name: 'fresh', description: 'Autopilot: move a new task in a long chat to a fresh chat', argumentHint: 'on|off' })
       void pollUsage($)
@@ -262,6 +263,9 @@ export const register: Register = on => {
         if (now >= pauseUntil && now - lastPoll >= (busy ? BUSY_POLL_MS : POLL_MS)) await pollUsage($).catch(() => undefined)
         else await share($).catch(() => undefined) // other chats' readings, and the clock for the reset countdown
         await syncTodos($).catch(() => undefined) // a to-do ticked in another chat shows here too
+        // The on/off switch is shared too: turned off in one chat, Autopilot steps aside in all of them.
+        const off = (await $.store.get('off').catch(() => undefined)) === true
+        if (off !== !!(await read($, view)).off) await update($, view, v => ({ ...v, off }))
       })
       // Team and to-dos on their own: a refusal here leaves routing and the banner running.
       void (async () => {
@@ -335,7 +339,7 @@ export const register: Register = on => {
     const { head, body } = L.splitNotes(e.text)
     const isHuman = !e.command && !e.isMeta && e.turnId === undefined && ['composer', 'bridge', 'sdk', 'unclassified'].includes(e.origin.kind) && !!body.trim() && !MACHINE.test(body)
     trace($, { event: 'prompt', origin: e.origin.kind, isMeta: e.isMeta, command: e.command, turnId: e.turnId, routed: isHuman, files: e.attachments?.length, text: body.slice(0, 60) })
-    if (!isHuman) return next(e)
+    if (!isHuman || (await read($, view)).off) return next(e)
     const p = L.parsePrefix(body)
     try {
       const v = await read($, view)
@@ -389,6 +393,7 @@ export const register: Register = on => {
   })
 
   on('turn.step', async function* ($, e, next) {
+    if ((await read($, view).catch(() => undefined))?.off) return yield* next(e) // switched off: the step goes as the engine set it
     let { model, effort } = e
     try {
       const v = await read($, view)
@@ -412,7 +417,7 @@ export const register: Register = on => {
 
   // Search, explore and summary helpers run on Haiku unless a model was named.
   on('agent.spawn', async ($, e, next) =>
-    e.model !== undefined || !HELPER.test(e.subagentType) ? next(e) : next({ ...e, model: models.haiku }))
+    e.model !== undefined || (await read($, view)).off || !HELPER.test(e.subagentType) ? next(e) : next({ ...e, model: models.haiku }))
 
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) {
@@ -439,7 +444,7 @@ export const register: Register = on => {
         file: isEdit ? e.file_path : undefined, oldText: isEdit ? e.old_string : undefined, newText: isEdit ? e.new_string : undefined,
       })
       const v = await read($, view)
-      const esc = why && v.route && v.mode === 'auto' ? L.escalate(v.route, why) : null
+      const esc = why && v.route && v.mode === 'auto' && !v.off ? L.escalate(v.route, why) : null
       if (esc && v.route) await tryEscalate($, esc, v.route, v.lock)
     } catch { /* escalation is optional */ }
     return r
@@ -465,8 +470,9 @@ export const register: Register = on => {
         lastFive = five
         const why = L.freshReason({ ctx: Math.max(0, (u.context.tokens ?? 0) - baseCtx), window: u.context.window, turnPct })
         if (why && !pending) log($, `fresh start due on your next message: ${why}`)
-        pending = why ?? pending
-        if (edited) void graph($, await $.session.cwd(), 'refreshed')
+        const off = (await read($, view)).off
+        if (!off) pending = why ?? pending
+        if (edited && !off) void graph($, await $.session.cwd(), 'refreshed')
       }
     } catch { /* bookkeeping only */ }
     return done
@@ -492,12 +498,14 @@ export const register: Register = on => {
     // Graphical surfaces draw the card; the terminal keeps the one-line text.
     // Settings: one row of buttons, saved to $.store and read on every step (no model call).
     const { Button } = ui
-    // Where the surface draws an Svg, a short drawing plays between the two states (banner.ts gearSvg).
-    const flip = (open: boolean) => async () => {
-      if (!('Svg' in ui)) return void (await update($, view, x => ({ ...x, settings: open })))
-      await update($, view, x => ({ ...x, settings: false, gearAnim: open ? 'open' : 'close' }))
-      $.clock.after(GEAR_MS, () => void update($, view, x => ({ ...x, gearAnim: undefined, settings: open })))
+    // The row above the card holds only buttons, so opening settings never changes its height (no jump).
+    const flip = (open: boolean) => () => update($, view, x => ({ ...x, settings: open }))
+    const setOff = (off: boolean) => async () => {
+      await $.store.set('off', off)
+      await update($, view, x => ({ ...x, off, settings: false }))
     }
+    // The desktop draws a Button's label and drops its children, so the label is the whole design: state in words.
+    const power = <Button key="power" label={`Autopilot: ${v.off ? 'Off' : 'On'}`} plain dimColor={v.off} onPress={setOff(!v.off)} />
     const setMax = (m: string) => async () => {
       await $.store.set('maxEffort', m)
       await update($, view, x => ({ ...x, maxEffort: m, route: x.route && { ...x.route, effort: L.capEffort(x.route.effort, m) } }))
@@ -541,14 +549,28 @@ export const register: Register = on => {
       </Box>
     )
     if ('Svg' in ui) {
-      const efforts = v.settings ? [<Text key="lbl" dimColor>Max effort:</Text>, ...L.EFFORTS.map(m => <Button key={m} label={(v.maxEffort ?? 'xhigh') === m ? `● ${m}` : m} plain dimColor={(v.maxEffort ?? 'xhigh') !== m} onPress={setMax(m)} />)] : []
-      const top = v.gearAnim ? [<ui.Svg source={gearSvg(v.gearAnim, v.maxEffort ?? 'xhigh')} alt="Settings" height={22} />] : [...efforts, gear]
-      return <Box key="banner" flexDirection="column"><Box key="row" flexDirection="row" gap={1} flexWrap="wrap" justifyContent="flex-end" alignItems="center">{top}</Box><ui.Svg source={bannerSvg(chipOf(v), meterOf('5-hour session', v.five, now), meterOf('Week', v.week, now), tokenText(v.life), v.pose)} alt={said} />{todo}</Box>
+      // Max effort shows its value; a click lays the four choices out beside it, the current one in the accent.
+      // Max effort shows its value; a click lays the four choices beside it, the current one ticked, and Done closes.
+      const max = v.maxEffort ?? 'xhigh'
+      const name = (m: string) => (m === 'xhigh' ? 'Extra high' : m[0]!.toUpperCase() + m.slice(1))
+      const efforts = v.settings ? L.EFFORTS.map(m => <Button key={m} label={m === max ? `✓ ${name(m)}` : name(m)} plain dimColor={m !== max} onPress={setMax(m)} />) : []
+      const gear = <Button key="gear" label={v.settings ? 'Done' : `Max effort: ${name(max)}`} plain onPress={flip(!v.settings)} />
+      // The switch on the left, above the crab; settings on the right (laid out like the to-do card's header).
+      const row = v.off ? <Box key="row" flexDirection="row">{power}</Box> : (
+        <Box key="row" flexDirection="row" justifyContent="space-between" alignItems="center">
+          {power}
+          <Box key="right" flexDirection="row" gap={2} alignItems="center">{[...efforts, gear]}</Box>
+        </Box>
+      )
+      // A native button's hover background is taller than its text line, so a gap keeps the card from covering it.
+      if (v.off) return <Box key="banner" flexDirection="column" gap={1}>{row}{todo}</Box>
+      return <Box key="banner" flexDirection="column" gap={1}>{row}<ui.Svg source={bannerSvg(chipOf(v), meterOf('5-hour session', v.five, now), meterOf('Week', v.week, now), tokenText(v.life), v.pose)} alt={said} />{todo}</Box>
     }
+    if (v.off) return <Box flexDirection="column"><Box flexDirection="row">{power}</Box>{todo}</Box>
     return (
       <Box flexDirection="column">{settings}
       <Box flexDirection="row" gap={1} flexWrap="wrap">
-        {gear}<Text bold>🤖 {routeLine(v)}</Text>
+        {power}{gear}<Text bold>🤖 {routeLine(v)}</Text>
         {r?.effort === 'xhigh' && <Text color="warning">⚡ extra effort</Text>}
         <Text dimColor>│ {usageText('5-hour session', v.five, now)} │ {usageText('Week', v.week, now)}</Text>
       </Box>

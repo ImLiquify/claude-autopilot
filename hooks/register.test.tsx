@@ -339,18 +339,29 @@ test('Claude flags a to-do as done: the card opens with a dot and a reason, the 
   await ui.unmount()
 })
 
-test('the gear plays its animation, then the effort buttons appear to its left; picking one closes them the same way', async ($, on) => {
+test('the gear shows the effort buttons in the same row, with no drawing swapped in; picking one closes them', async ($, on) => {
   const w = await boot($, on, { store: {} })
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', ...BAND })
   await ui.press({ key: 'gear' } as never)
-  expect(await ui.findAll({ type: 'Svg' } as never)).toHaveLength(2) // the gear drawing beside the bar's
-  expect(await ui.find({ type: 'Button', key: 'high' } as never)).toBeUndefined()
-  await w.clock!.advance(400)
-  expect(await ui.findAll({ type: 'Svg' } as never)).toHaveLength(1)
+  expect(await ui.findAll({ type: 'Svg' } as never)).toHaveLength(1) // only the bar's card, nothing swapped in
   await ui.press({ key: 'high' } as never)
-  expect(await ui.findAll({ type: 'Svg' } as never)).toHaveLength(2) // the gear drawing beside the bar's
-  await w.clock!.advance(400)
   expect(await ui.find({ type: 'Button', key: 'high' } as never)).toBeUndefined()
   expect(w.store!.maxEffort).toBe('high')
+  await ui.unmount()
+})
+
+test('the switch turns Autopilot off: the card goes, prompts and steps are left alone, and it turns back on', async ($, on) => {
+  const w = await boot($, on, { store: {}, answer: 'OPUS HIGH' })
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', ...BAND })
+  await ui.press({ key: 'power' } as never)
+  expect(w.store!.off).toBe(true)
+  expect(await ui.findAll({ type: 'Svg' } as never)).toHaveLength(0) // the card is gone, the switch stays
+  const before = w.classified
+  await say($, 'Refactor the payment queue locking and add tests for it')
+  expect(w.classified).toBe(before)
+  expect(await step($, 'medium', 'claude-sonnet-5-5')).toEqual({ model: 'claude-sonnet-5-5', effort: 'medium' })
+  await ui.press({ key: 'power' } as never)
+  expect(w.store!.off).toBe(false)
+  expect(await ui.findAll({ type: 'Svg' } as never)).toHaveLength(1)
   await ui.unmount()
 })
