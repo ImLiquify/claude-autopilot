@@ -9,7 +9,6 @@ type $T = EngineInterface
 
 const view = atom({ plugin: 'autopilot', key: 'view' } as const, { route: null, mode: 'auto', now: 0 } as ApView)
 const todos = atom({ plugin: 'autopilot', key: 'todos' } as const, [] as ApTodo[])
-const DASH = 'autopilot-dash'
 
 // Coding team: three agent types the main chat runs in turn, so the reviewer checks the other two like a manager.
 // Builder takes the chat's routed model; tester and reviewer only read and run, so they get their own.
@@ -264,14 +263,13 @@ export const register: Register = on => {
         else await share($).catch(() => undefined) // other chats' readings, and the clock for the reset countdown
         await syncTodos($).catch(() => undefined) // a to-do ticked in another chat shows here too
       })
-      // Team and dashboard on their own: a refusal here leaves routing and the banner running.
+      // Team and to-dos on their own: a refusal here leaves routing and the banner running.
       void (async () => {
         await $.command.register({ name: 'team', description: 'Autopilot: builder, tester and reviewer agents work a coding goal together', argumentHint: '<goal>' })
-        await $.command.register({ name: 'todo', description: 'Autopilot dashboard to-do list', argumentHint: '<text> | done <n> | clear' })
+        await $.command.register({ name: 'todo', description: 'Autopilot to-do list, shared by all your chats', argumentHint: '<text> | done <n> | clear' })
         for (const a of TEAM) await $.agent.register(a)
         await syncTodos($)
-        await $.ui.open({ id: DASH, title: 'Dashboard' })
-      })().catch(err => log($, `team/dashboard setup skipped: ${String(err)}`))
+      })().catch(err => log($, `team/todo setup skipped: ${String(err)}`))
       void (async () => {
         const cwd = await $.session.cwd()
         if (!(await $.fs.exists(`${cwd}/graphify-out/graph.json`))) await graph($, cwd, 'built')
@@ -310,22 +308,7 @@ export const register: Register = on => {
   on('command.run', { command: 'todo' }, async ($, e) => {
     let text = ''
     await saveTodos($, list => { const r = L.todoCmd(list, e.args); text = r.text; return r.list })
-    void $.ui.open({ id: DASH, title: 'Dashboard' })
     return { text }
-  })
-
-  on('ui.render', { component: 'Pane', requestId: DASH }, async ($, e) => {
-    const { Box, Text, Button } = $.ui.resolve(e)
-    const list = await read($, todos)
-    const toggle = (i: number) => () => saveTodos($, l => l.map((t, j) => (j === i ? { ...t, done: !t.done } : t)))
-    return (
-      <Box flexDirection="column">
-        <Text bold>To do</Text>
-        {list.length === 0 && <Text dimColor>{'Nothing yet. Add one with /todo <text>.'}</Text>}
-        {list.map((t, i) => <Button key={`t${i}`} label={`${t.done ? '☑' : '☐'} ${t.text}`} plain dimColor={t.done} onPress={toggle(i)} />)}
-        {list.some(t => t.done) && <Button key="clear" label="Clear finished" plain dimColor onPress={() => saveTodos($, l => l.filter(t => !t.done))} />}
-      </Box>
-    )
   })
 
   // Router: once per human prompt, never mid-turn, never on machine-made prompts.
@@ -498,7 +481,17 @@ export const register: Register = on => {
         {L.EFFORTS.map(m => <Button key={m} label={(v.maxEffort ?? 'xhigh') === m ? `● ${m}` : m} plain dimColor={(v.maxEffort ?? 'xhigh') !== m} onPress={setMax(m)} />)}
       </Box>
     )
-    if ('Svg' in ui) return <Box key="banner" flexDirection="column"><Box key="row" flexDirection="row" justifyContent="flex-end">{gear}</Box><ui.Svg source={bannerSvg(chipOf(v), meterOf('5-hour session', v.five, now), meterOf('Week', v.week, now), tokenText(v.life), v.pose)} alt={said} />{settings}</Box>
+    // To-dos: one collapsed row under the bar, opened and closed with a click; hidden while the list is empty.
+    const list = await read($, todos)
+    const toggle = (i: number) => () => saveTodos($, l => l.map((t, j) => (j === i ? { ...t, done: !t.done } : t)))
+    const todo = list.length > 0 && (
+      <Box key="todo" flexDirection="column">
+        <Button key="todo-bar" label={`${v.todoOpen ? '▾' : '▸'} To-do · ${list.filter(t => !t.done).length} left of ${list.length}`} plain dimColor onPress={() => update($, view, x => ({ ...x, todoOpen: !x.todoOpen }))} />
+        {v.todoOpen && list.map((t, i) => <Button key={`t${i}`} label={`${t.done ? '☑' : '☐'} ${t.text}`} plain dimColor={t.done} onPress={toggle(i)} />)}
+        {v.todoOpen && list.some(t => t.done) && <Button key="clear" label="Clear finished" plain dimColor onPress={() => saveTodos($, l => l.filter(t => !t.done))} />}
+      </Box>
+    )
+    if ('Svg' in ui) return <Box key="banner" flexDirection="column"><Box key="row" flexDirection="row" justifyContent="flex-end">{gear}</Box><ui.Svg source={bannerSvg(chipOf(v), meterOf('5-hour session', v.five, now), meterOf('Week', v.week, now), tokenText(v.life), v.pose)} alt={said} />{settings}{todo}</Box>
     return (
       <Box flexDirection="column">{settings}
       <Box flexDirection="row" gap={1} flexWrap="wrap">
@@ -506,6 +499,7 @@ export const register: Register = on => {
         {r?.effort === 'xhigh' && <Text color="warning">⚡ extra effort</Text>}
         <Text dimColor>│ {usageText('5-hour session', v.five, now)} │ {usageText('Week', v.week, now)}</Text>
       </Box>
+      {todo}
       </Box>
     )
   })

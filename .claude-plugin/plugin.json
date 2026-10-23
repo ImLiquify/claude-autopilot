@@ -1,6 +1,6 @@
 {
   "name": "autopilot",
-  "version": "0.9.5",
+  "version": "0.10.3",
   "description": "Picks the right model for each task, locks the model in long chats to keep the prompt cache, and shows live 5-hour and weekly usage above the prompt.",
   "author": { "name": "Mohamed Kaiser", "url": "https://github.com/ImLiquify" },
   "repository": "https://github.com/ImLiquify/claude-autopilot",

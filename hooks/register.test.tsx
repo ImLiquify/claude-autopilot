@@ -289,8 +289,6 @@ test('a prompt naming an image the app attached as text stays in the chat', asyn
   expect(w.commands).not.toContain('clear')
 })
 
-const DASH = { component: 'Pane', requestId: 'autopilot-dash', props: { title: 'Dashboard', isFocused: false, bodyColumns: 40, placement: 'dock', scroll: { offset: 0, bodyRows: 20 }, view: {} } as never } as const
-
 test('the simplest prompts go to Haiku in a short chat, never in a locked long one', async ($, on) => {
   const w = await boot($, on, { answer: 'HAIKU LOW' })
   await say($, 'Fix the typo in the footer: Copyrigth')
@@ -311,12 +309,19 @@ test('coding team: three agent types are registered and /team hands the goal to 
   expect(w.submitted.at(-1)).toContain('add a CSV export')
 })
 
-test('dashboard: /todo adds an item, the pane lists it, a click ticks it', async ($, on) => {
-  await boot($, on)
+test('to-dos: a collapsed row under the bar, opened with a click; a tick saves for every chat', async ($, on) => {
+  const w = await boot($, on, { store: {} })
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', ...BAND })
+  expect(await ui.find({ type: 'Button', key: 'todo-bar' } as never)).toBeUndefined() // nothing to show yet
   await $.command.run({ command: 'todo', args: 'reply to Sam' } as never)
-  const ui = await $.ui.mount({ ...DASH, plugin: PLUGIN, surface: 'desktop' } as never)
-  expect((await ui.find({ type: 'Button', key: 't0' }))?.props.label).toBe('☐ reply to Sam')
+  expect((await ui.find({ type: 'Button', key: 'todo-bar' } as never))?.props.label).toBe('▸ To-do · 1 left of 1')
+  expect(await ui.find({ type: 'Button', key: 't0' } as never)).toBeUndefined() // collapsed
+  await ui.press({ key: 'todo-bar' } as never)
   await ui.press({ key: 't0' } as never)
-  expect((await ui.find({ type: 'Button', key: 't0' }))?.props.label).toBe('☑ reply to Sam')
+  expect((await ui.find({ type: 'Button', key: 't0' } as never))?.props.label).toBe('☑ reply to Sam')
+  expect(w.store!.todos).toEqual([{ text: 'reply to Sam', done: true }])
+  w.store!.todos = [{ text: 'reply to Sam', done: true }, { text: 'added in another chat', done: false }]
+  await w.clock!.advance(5_000) // the 5 s tick picks up another chat's change
+  expect((await ui.find({ type: 'Button', key: 't1' } as never))?.props.label).toBe('☐ added in another chat')
   await ui.unmount()
 })

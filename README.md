@@ -5,7 +5,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue" alt="License: MIT"/></a>
   <img src="https://img.shields.io/badge/Claude%20Code-plugin-d97757" alt="Claude Code plugin"/>
-  <img src="https://img.shields.io/badge/version-0.9.5-informational" alt="Version 0.9.5"/>
+  <img src="https://img.shields.io/badge/version-0.10.3-informational" alt="Version 0.10.3"/>
   <img src="https://img.shields.io/badge/tests-40%20passing-brightgreen" alt="40 tests passing"/>
 </p>
 
@@ -113,7 +113,7 @@ When a chat is already big and you start something unrelated, re-reading the old
 
 - **Cheap helpers.** Explore, search and summary subagents run on Haiku unless a model is named.
 - **Coding team.** `/team <goal>` runs a builder, a tester and a reviewer agent in turn. The reviewer can send work back for up to 3 rounds.
-- **To-do list.** `/todo` keeps a small list in a dashboard pane, shared across your chats.
+- **To-do list.** `/todo <text>` adds a task. A small `▸ To-do · 2 left of 3` row appears under the bar: click it to expand or collapse the list, click an item to tick it. The list is shared by all your chats, so you can tick a task in one chat and see it in the others within 5 seconds.
 
 ---
 
@@ -126,7 +126,7 @@ When a chat is already big and you start something unrelated, re-reading the old
 | `/route off` | Your own model. The effort cap still applies |
 | `/fresh on` · `/fresh off` | Turn fresh starts on or off |
 | `/team <goal>` | Builder, tester and reviewer agents work a coding goal together |
-| `/todo <text>` · `/todo done <n>` · `/todo clear` | Add, tick or clear dashboard to-dos |
+| `/todo <text>` · `/todo done <n>` · `/todo clear` | Add, tick or clear to-dos (shared by all your chats) |
 
 **Per-message overrides.** Start a message with one of these to skip the check:
 

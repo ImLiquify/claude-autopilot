@@ -14,6 +14,7 @@ export type ApView = {
   now: number
   note?: string
   pose?: 'idle' | 'think' | 'work' // the mascot: blinking, thinking, walking
+  todoOpen?: boolean // the to-do row under the bar is expanded
 }
 
 export type ApTodo = { text: string; done: boolean }
