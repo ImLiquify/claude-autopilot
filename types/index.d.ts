@@ -14,10 +14,11 @@ export type ApView = {
   now: number
   note?: string
   pose?: 'idle' | 'think' | 'work' // the mascot: blinking, thinking, walking
-  todoOpen?: boolean // the to-do row under the bar is expanded
+  todoOpen?: boolean // the to-do card under the bar is expanded
+  gearAnim?: 'open' | 'close' // the settings gear's animation is playing
 }
 
-export type ApTodo = { text: string; done: boolean }
+export type ApTodo = { text: string; done: boolean; suggested?: string } // suggested: Claude's reason, awaiting review
 
 declare module 'claude-code' {
   interface PluginState {

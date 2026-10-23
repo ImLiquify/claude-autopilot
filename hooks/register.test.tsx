@@ -309,19 +309,48 @@ test('coding team: three agent types are registered and /team hands the goal to 
   expect(w.submitted.at(-1)).toContain('add a CSV export')
 })
 
-test('to-dos: a collapsed row under the bar, opened with a click; a tick saves for every chat', async ($, on) => {
+test('to-dos: a card under the bar, opened with a click; a tick saves for every chat', async ($, on) => {
   const w = await boot($, on, { store: {} })
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', ...BAND })
   expect(await ui.find({ type: 'Button', key: 'todo-bar' } as never)).toBeUndefined() // nothing to show yet
   await $.command.run({ command: 'todo', args: 'reply to Sam' } as never)
-  expect((await ui.find({ type: 'Button', key: 'todo-bar' } as never))?.props.label).toBe('▸ To-do · 1 left of 1')
+  expect((await ui.find({ type: 'Button', key: 'todo-bar' } as never))?.props.label).toBe('To-Do List, 1 left of 1, closed')
   expect(await ui.find({ type: 'Button', key: 't0' } as never)).toBeUndefined() // collapsed
   await ui.press({ key: 'todo-bar' } as never)
   await ui.press({ key: 't0' } as never)
-  expect((await ui.find({ type: 'Button', key: 't0' } as never))?.props.label).toBe('☑ reply to Sam')
+  expect((await ui.find({ type: 'Button', key: 't0' } as never))?.props.label).toBe('Done: reply to Sam')
   expect(w.store!.todos).toEqual([{ text: 'reply to Sam', done: true }])
   w.store!.todos = [{ text: 'reply to Sam', done: true }, { text: 'added in another chat', done: false }]
   await w.clock!.advance(5_000) // the 5 s tick picks up another chat's change
-  expect((await ui.find({ type: 'Button', key: 't1' } as never))?.props.label).toBe('☐ added in another chat')
+  expect((await ui.find({ type: 'Button', key: 't1' } as never))?.props.label).toBe('To do: added in another chat')
+  await ui.unmount()
+})
+
+test('Claude flags a to-do as done: the card opens with a dot and a reason, the person ticks it or says not yet', async ($, on) => {
+  const w = await boot($, on, { store: { todos: [{ text: 'Log book', done: false }] } })
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', ...BAND })
+  const listed = await $.tool.call({ tool: 'mcp__autopilot__todo', action: 'list' } as never)
+  expect(JSON.stringify(listed)).toContain('1. [ ] Log book')
+  await $.tool.call({ tool: 'mcp__autopilot__todo', action: 'suggest_done', item: 1, why: 'the log book page is committed' } as never)
+  expect(w.store!.todos).toEqual([{ text: 'Log book', done: false, suggested: 'the log book page is committed' }])
+  expect(await ui.find({ type: 'Button', key: 'n0' } as never)).toBeDefined() // open, with Not yet
+  await ui.press({ key: 'n0' } as never)
+  expect(w.store!.todos).toEqual([{ text: 'Log book', done: false }])
+  await ui.unmount()
+})
+
+test('the gear plays its animation, then the effort buttons appear to its left; picking one closes them the same way', async ($, on) => {
+  const w = await boot($, on, { store: {} })
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', ...BAND })
+  await ui.press({ key: 'gear' } as never)
+  expect(await ui.findAll({ type: 'Svg' } as never)).toHaveLength(2) // the gear drawing beside the bar's
+  expect(await ui.find({ type: 'Button', key: 'high' } as never)).toBeUndefined()
+  await w.clock!.advance(400)
+  expect(await ui.findAll({ type: 'Svg' } as never)).toHaveLength(1)
+  await ui.press({ key: 'high' } as never)
+  expect(await ui.findAll({ type: 'Svg' } as never)).toHaveLength(2) // the gear drawing beside the bar's
+  await w.clock!.advance(400)
+  expect(await ui.find({ type: 'Button', key: 'high' } as never)).toBeUndefined()
+  expect(w.store!.maxEffort).toBe('high')
   await ui.unmount()
 })

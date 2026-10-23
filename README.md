@@ -5,8 +5,8 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue" alt="License: MIT"/></a>
   <img src="https://img.shields.io/badge/Claude%20Code-plugin-d97757" alt="Claude Code plugin"/>
-  <img src="https://img.shields.io/badge/version-0.10.3-informational" alt="Version 0.10.3"/>
-  <img src="https://img.shields.io/badge/tests-40%20passing-brightgreen" alt="40 tests passing"/>
+  <img src="https://img.shields.io/badge/version-0.11.0-informational" alt="Version 0.11.0"/>
+  <img src="https://img.shields.io/badge/tests-44%20passing-brightgreen" alt="44 tests passing"/>
 </p>
 
 <p align="center">
@@ -103,7 +103,7 @@ When a chat is already big and you start something unrelated, re-reading the old
 
 ### 5. Effort never runs away
 
-`max` effort is always lowered to `xhigh`. Click ⚙ on the bar to set your own ceiling (for example `high`). The cap holds even with routing off.
+`max` effort is always lowered to `xhigh`. Click ⚙ on the bar to set your own ceiling (for example `high`): the gear turns and the choices slide out to its left. The cap holds even with routing off.
 
 <p align="center">
   <img src="docs/banner-heavy.svg" width="730" alt="The bar on a heavy task: Opus · xhigh with the extra effort tag"/>
@@ -113,7 +113,7 @@ When a chat is already big and you start something unrelated, re-reading the old
 
 - **Cheap helpers.** Explore, search and summary subagents run on Haiku unless a model is named.
 - **Coding team.** `/team <goal>` runs a builder, a tester and a reviewer agent in turn. The reviewer can send work back for up to 3 rounds.
-- **To-do list.** `/todo <text>` adds a task. A small `▸ To-do · 2 left of 3` row appears under the bar: click it to expand or collapse the list, click an item to tick it. The list is shared by all your chats, so you can tick a task in one chat and see it in the others within 5 seconds.
+- **To-do list.** `/todo <text>` adds a task. A rounded *To-Do List* card appears under the bar: click its title to expand or collapse it, click a task to tick it, or `＋` to add one. The list is shared by all your chats. When Claude finishes work that looks like one of your tasks, it flags it with an orange dot and a one-line reason. You review it and tick it yourself, or press *Not yet*.
 
 ---
 

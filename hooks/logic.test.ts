@@ -117,3 +117,14 @@ test('Haiku: picked for the simplest jobs, always at low, and stuck steps it up 
   expect(L.parseRoute('HAIKU LOW')).toMatchObject({ family: 'haiku', effort: 'low' })
   expect(L.escalate(L.parseRoute('HAIKU LOW')!, 'stuck')).toMatchObject({ family: 'sonnet', effort: 'medium' })
 })
+
+test('Claude can flag an open to-do for review; ticking it settles the flag', () => {
+  const list = [{ text: 'Log book', done: false }, { text: 'Kiyas website', done: true }]
+  const r = L.suggestDone(list, 1, 'the log book page is written and committed')
+  expect(r.flagged).toBe('Log book')
+  expect(r.list[0]).toEqual({ text: 'Log book', done: false, suggested: 'the log book page is written and committed' })
+  expect(L.todoListText(r.list)).toBe('1. [ ] Log book (flagged, waiting for the user to review)\n2. [x] Kiyas website')
+  expect(L.suggestDone(list, 2, 'x').flagged).toBeUndefined() // already ticked
+  expect(L.suggestDone(list, 9, 'x').text).toContain('There is no item 9.')
+  expect(L.todoCmd(r.list, 'done 1').list[0]).toEqual({ text: 'Log book', done: true })
+})

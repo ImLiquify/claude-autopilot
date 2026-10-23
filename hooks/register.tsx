@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { ApTodo, ApView } from '../types'
-import { bannerSvg, chipOf, meterOf, routeLine, tokenText, usageText } from './banner'
+import { bannerSvg, chipOf, GEAR_MS, gearSvg, meterOf, routeLine, tokenText, usageText } from './banner'
 import * as L from './logic'
 
 type $T = EngineInterface
@@ -268,6 +268,12 @@ export const register: Register = on => {
         await $.command.register({ name: 'team', description: 'Autopilot: builder, tester and reviewer agents work a coding goal together', argumentHint: '<goal>' })
         await $.command.register({ name: 'todo', description: 'Autopilot to-do list, shared by all your chats', argumentHint: '<text> | done <n> | clear' })
         for (const a of TEAM) await $.agent.register(a)
+        // Not deferred and never rewritten, so the cached prompt prefix stays the same from turn to turn.
+        await $.tool.register({
+          name: 'todo', isDeferred: false,
+          description: "The user's Autopilot to-do list, shared by all their chats. Use action 'list' when the user mentions their to-dos, or after finishing a piece of work that might be one of them. If work done in this chat completes an open item, call action 'suggest_done' with its number and a one-line reason: the user reviews and ticks it themselves. Never say an item is ticked.",
+          inputSchema: { type: 'object', properties: { action: { type: 'string', enum: ['list', 'suggest_done'] }, item: { type: 'number', description: 'suggest_done: the item number from list' }, why: { type: 'string', description: 'suggest_done: one line on what was done' } }, required: ['action'] },
+        })
         await syncTodos($)
       })().catch(err => log($, `team/todo setup skipped: ${String(err)}`))
       void (async () => {
@@ -309,6 +315,19 @@ export const register: Register = on => {
     let text = ''
     await saveTodos($, list => { const r = L.todoCmd(list, e.args); text = r.text; return r.list })
     return { text }
+  })
+
+  // Claude's side of the to-do list: it reads it and may flag an item as done; the card shows the flag for review.
+  on('tool.call', { tool: 'mcp__autopilot__todo' }, async ($, e) => {
+    const a = e as unknown as { action?: string; item?: number; why?: string }
+    if (a.action !== 'suggest_done') return { result: L.todoListText(((await $.store.get('todos')) ?? []) as ApTodo[]) } as never
+    let text = '', flagged: string | undefined
+    await saveTodos($, list => { const r = L.suggestDone(list, Number(a.item), String(a.why ?? '')); text = r.text; flagged = r.flagged; return r.list })
+    if (flagged) {
+      await update($, view, v => ({ ...v, todoOpen: true }))
+      $.ui.toast(`Claude thinks "${flagged}" is done. Review it in your to-do list.`)
+    }
+    return { result: text } as never
   })
 
   // Router: once per human prompt, never mid-turn, never on machine-made prompts.
@@ -473,25 +492,59 @@ export const register: Register = on => {
     // Graphical surfaces draw the card; the terminal keeps the one-line text.
     // Settings: one row of buttons, saved to $.store and read on every step (no model call).
     const { Button } = ui
-    const setMax = (m: string) => async () => { await $.store.set('maxEffort', m); await update($, view, x => ({ ...x, maxEffort: m, settings: false, route: x.route && { ...x.route, effort: L.capEffort(x.route.effort, m) } })) }
-    const gear = <Button key="gear" label="⚙" plain onPress={() => update($, view, x => ({ ...x, settings: !x.settings }))} />
+    // Where the surface draws an Svg, a short drawing plays between the two states (banner.ts gearSvg).
+    const flip = (open: boolean) => async () => {
+      if (!('Svg' in ui)) return void (await update($, view, x => ({ ...x, settings: open })))
+      await update($, view, x => ({ ...x, settings: false, gearAnim: open ? 'open' : 'close' }))
+      $.clock.after(GEAR_MS, () => void update($, view, x => ({ ...x, gearAnim: undefined, settings: open })))
+    }
+    const setMax = (m: string) => async () => {
+      await $.store.set('maxEffort', m)
+      await update($, view, x => ({ ...x, maxEffort: m, route: x.route && { ...x.route, effort: L.capEffort(x.route.effort, m) } }))
+      await flip(false)()
+    }
+    const gear = <Button key="gear" label="⚙" plain onPress={flip(!v.settings)} />
     const settings = v.settings && (
       <Box key="settings" flexDirection="row" gap={1} flexWrap="wrap" justifyContent="flex-end">
         <Text key="lbl" dimColor>Max effort:</Text>
         {L.EFFORTS.map(m => <Button key={m} label={(v.maxEffort ?? 'xhigh') === m ? `● ${m}` : m} plain dimColor={(v.maxEffort ?? 'xhigh') !== m} onPress={setMax(m)} />)}
       </Box>
     )
-    // To-dos: one collapsed row under the bar, opened and closed with a click; hidden while the list is empty.
+    // To-dos: a rounded card under the bar, collapsed to its title row by a click; hidden while the list is empty.
+    // An orange dot marks an item Claude flagged as done: the person ticks it, or answers "Not yet".
     const list = await read($, todos)
-    const toggle = (i: number) => () => saveTodos($, l => l.map((t, j) => (j === i ? { ...t, done: !t.done } : t)))
+    const left = list.filter(t => !t.done).length
+    const toggle = (i: number) => () => saveTodos($, l => l.map((t, j) => (j === i ? L.tick(t) : t)))
+    const unflag = (i: number) => () => saveTodos($, l => l.map(({ suggested: _, ...t }, j) => (j === i ? t : l[j]!)))
     const todo = list.length > 0 && (
-      <Box key="todo" flexDirection="column">
-        <Button key="todo-bar" label={`${v.todoOpen ? '▾' : '▸'} To-do · ${list.filter(t => !t.done).length} left of ${list.length}`} plain dimColor onPress={() => update($, view, x => ({ ...x, todoOpen: !x.todoOpen }))} />
-        {v.todoOpen && list.map((t, i) => <Button key={`t${i}`} label={`${t.done ? '☑' : '☐'} ${t.text}`} plain dimColor={t.done} onPress={toggle(i)} />)}
+      <Box key="todo" flexDirection="column" borderStyle="round" borderDimColor paddingX="md" paddingY="sm" rowGap="sm">
+        <Box key="head" flexDirection="row" justifyContent="space-between" alignItems="center">
+          <Button key="todo-bar" label={`To-Do List, ${left} left of ${list.length}, ${v.todoOpen ? 'open' : 'closed'}`} plain onPress={() => update($, view, x => ({ ...x, todoOpen: !x.todoOpen }))}>
+            <Text size="heading" weight="bold">To-Do List</Text><Text dimColor>{v.todoOpen ? '  ▾' : `  ▸  ${left} left`}</Text>
+          </Button>
+          <Button key="todo-add" label="＋" plain dimColor onPress={() => $.prompt.fill({ text: '/todo ' })} />
+        </Box>
+        {v.todoOpen && list.map((t, i) => (
+          <Box key={`r${i}`} flexDirection="column">
+            <Box key="line" flexDirection="row" justifyContent="space-between" alignItems="center">
+              <Button key={`t${i}`} label={`${t.done ? 'Done' : 'To do'}: ${t.text}`} plain onPress={toggle(i)}>
+                <Text color={t.done ? 'claude' : undefined} dimColor={!t.done}>{t.done ? '●' : '○'}</Text>
+                <Text strikethrough={t.done} dimColor={t.done} weight="medium">{`   ${t.text}`}</Text>
+                {t.suggested && !t.done ? <Text color="claude"> ●</Text> : ''}
+              </Button>
+              {t.suggested && !t.done && <Button key={`n${i}`} label="Not yet" plain dimColor onPress={unflag(i)} />}
+            </Box>
+            {t.suggested && !t.done && <Text key="why" size="footnote" dimColor>{`      Claude thinks this is done: ${t.suggested}`}</Text>}
+          </Box>
+        ))}
         {v.todoOpen && list.some(t => t.done) && <Button key="clear" label="Clear finished" plain dimColor onPress={() => saveTodos($, l => l.filter(t => !t.done))} />}
       </Box>
     )
-    if ('Svg' in ui) return <Box key="banner" flexDirection="column"><Box key="row" flexDirection="row" justifyContent="flex-end">{gear}</Box><ui.Svg source={bannerSvg(chipOf(v), meterOf('5-hour session', v.five, now), meterOf('Week', v.week, now), tokenText(v.life), v.pose)} alt={said} />{settings}{todo}</Box>
+    if ('Svg' in ui) {
+      const efforts = v.settings ? [<Text key="lbl" dimColor>Max effort:</Text>, ...L.EFFORTS.map(m => <Button key={m} label={(v.maxEffort ?? 'xhigh') === m ? `● ${m}` : m} plain dimColor={(v.maxEffort ?? 'xhigh') !== m} onPress={setMax(m)} />)] : []
+      const top = v.gearAnim ? [<ui.Svg source={gearSvg(v.gearAnim, v.maxEffort ?? 'xhigh')} alt="Settings" height={22} />] : [...efforts, gear]
+      return <Box key="banner" flexDirection="column"><Box key="row" flexDirection="row" gap={1} flexWrap="wrap" justifyContent="flex-end" alignItems="center">{top}</Box><ui.Svg source={bannerSvg(chipOf(v), meterOf('5-hour session', v.five, now), meterOf('Week', v.week, now), tokenText(v.life), v.pose)} alt={said} />{todo}</Box>
+    }
     return (
       <Box flexDirection="column">{settings}
       <Box flexDirection="row" gap={1} flexWrap="wrap">

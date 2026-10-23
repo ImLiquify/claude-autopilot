@@ -169,14 +169,16 @@ export const parseUsage = (text: string): { five?: Window; week?: Window } => {
 
 
 // --- Dashboard to-do list: /todo <text> adds, /todo done <n> ticks (or unticks), /todo clear drops ticked, /todo lists.
-export type Todo = { text: string; done: boolean }
+export type Todo = { text: string; done: boolean; suggested?: string } // suggested: Claude's reason it looks finished, awaiting the person
+// Ticking (or unticking) settles any suggestion: the person has reviewed it.
+export const tick = ({ suggested: _, ...t }: Todo): Todo => ({ ...t, done: !t.done })
 export const todoCmd = (list: readonly Todo[], args: string): { list: Todo[]; text: string } => {
   const a = args.trim()
   const n = /^done\s+(\d+)$/i.exec(a)
   if (n) {
     const i = Number(n[1]) - 1, t = list[i]
     if (!t) return { list: [...list], text: `There is no item ${n[1]}.` }
-    return { list: list.map((x, j) => (j === i ? { ...x, done: !x.done } : x)), text: `${t.done ? 'Reopened' : 'Done'}: ${t.text}` }
+    return { list: list.map((x, j) => (j === i ? tick(x) : x)), text: `${t.done ? 'Reopened' : 'Done'}: ${t.text}` }
   }
   if (/^clear$/i.test(a)) {
     const keep = list.filter(t => !t.done)
@@ -190,4 +192,16 @@ export const todoCmd = (list: readonly Todo[], args: string): { list: Todo[]; te
 export const splitNotes = (text: string) => {
   const head = /^(\s*<system-reminder>[\s\S]*?<\/system-reminder>)*\s*/.exec(text)?.[0] ?? ''
   return { head, body: text.slice(head.length) }
+}
+
+// Claude's side of the list: it reads it, and may flag an open item as looking finished. Only the person ticks it.
+export const todoListText = (list: readonly Todo[]) =>
+  list.length ? list.map((t, i) => `${i + 1}. [${t.done ? 'x' : ' '}] ${t.text}${t.suggested ? ' (flagged, waiting for the user to review)' : ''}`).join('\n') : 'The to-do list is empty.'
+export const suggestDone = (list: readonly Todo[], n: number, why: string): { list: Todo[]; text: string; flagged?: string } => {
+  const t = list[n - 1]
+  if (!t) return { list: [...list], text: `There is no item ${n}.\n${todoListText(list)}` }
+  if (t.done) return { list: [...list], text: `Item ${n} is already ticked.` }
+  const reason = why.trim().slice(0, 160) || 'looks finished'
+  return { list: list.map((x, j) => (j === n - 1 ? { ...x, suggested: reason } : x)), flagged: t.text,
+    text: `Flagged "${t.text}" for the user to review. Tell them you think it is done and why; do not say it is ticked, they tick it themselves.` }
 }

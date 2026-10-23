@@ -111,3 +111,24 @@ export const tokenText = (life: number | undefined) => {
   const f = (n?: number) => (n === undefined ? '…' : n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n))
   return `Lifetime ${f(life)} tokens`
 }
+
+// ---------- The settings gear: native buttons cannot animate, so for GEAR_MS a drawing stands in for the gear and
+// the effort row. The gear turns counter-clockwise as the row slides out of it to the left, and back on close.
+export const GEAR_MS = 320
+export const gearSvg = (dir: 'open' | 'close', max: string) => {
+  const labels = ['Max effort:', ...L.EFFORTS.map(e => (e === max ? `● ${e}` : e))]
+  let x = 0
+  const texts = labels.map(l => { const t = `<text class="t" x="${x}" y="15">${esc(l)}</text>`; x += l.length * 7 + 10; return t }).join('')
+  const W = x + 24, from = `translateX(${x}px) scaleX(.15)`
+  const [a, b] = dir === 'open' ? [`transform:${from};opacity:0`, 'transform:none;opacity:1'] : ['transform:none;opacity:1', `transform:${from};opacity:0`]
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="22" viewBox="0 0 ${W} 22">
+<style>.t{fill:#7b776d;font-size:13px;font-family:Segoe UI Variable,Segoe UI,system-ui,-apple-system,sans-serif}.g{fill:#26241f;font-size:16px}
+@media (prefers-color-scheme: dark){.t{fill:#a29e94}.g{fill:#efede7}}
+.row{transform-origin:${x}px 11px;animation:row ${GEAR_MS}ms cubic-bezier(.2,.8,.2,1) forwards}
+.gear{transform-box:fill-box;transform-origin:center;animation:gear ${GEAR_MS}ms cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes row{from{${a}}to{${b}}}
+@keyframes gear{from{transform:rotate(${dir === 'open' ? 0 : -90}deg)}to{transform:rotate(${dir === 'open' ? -90 : 0}deg)}}
+@media (prefers-reduced-motion: reduce){*{animation-duration:1ms!important}}
+</style><clipPath id="c"><rect width="${x}" height="22"/></clipPath>
+<g clip-path="url(#c)"><g class="row">${texts}</g></g><text class="g gear" x="${W - 12}" y="16" text-anchor="middle">⚙</text></svg>`
+}
