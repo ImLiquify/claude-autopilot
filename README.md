@@ -103,7 +103,9 @@ When a chat is already big and you start something unrelated, re-reading the old
 
 ### 5. Effort never runs away
 
-`max` effort is always lowered to `xhigh`. Click ⚙ on the bar to set your own ceiling (for example `high`): the gear turns and the choices slide out to its left. The cap holds even with routing off.
+`max` effort is always lowered to `xhigh`. Click **Max effort: High** above the bar to set your own ceiling: the choices appear beside it, the current one ticked, and **Done** closes them. The cap holds even with routing off.
+
+The **Autopilot: On** switch on the left of that row turns the whole mod off and on, in every chat at once. Off, Claude Code runs exactly as it would without Autopilot.
 
 <p align="center">
   <img src="docs/banner-heavy.svg" width="730" alt="The bar on a heavy task: Opus · xhigh with the extra effort tag"/>
