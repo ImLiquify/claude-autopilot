@@ -1,0 +1,1 @@
+{ "name": "autopilot", "description": "Autopilot: automatic model routing and live usage for Claude Code", "owner": { "name": "ImLiquify" }, "plugins": [{ "name": "autopilot", "source": "./" }] }
