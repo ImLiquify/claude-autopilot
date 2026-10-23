@@ -25,7 +25,7 @@ Autopilot fixes that automatically. Install it once and keep working the way you
 - **Always know where you stand.** Your 5-hour and weekly limits, with reset times, live above the prompt.
 
 <p align="center">
-  <img src="docs/banner-normal.svg" width="730" alt="The Autopilot bar: Sonnet · medium for a normal task, 5-hour session 42%, week 31%, with reset times"/>
+  <img src="docs/banner-normal.svg" width="730" alt="The Autopilot bar: the Autopilot: On switch and Max effort above a card showing Sonnet · medium for a normal task, 5-hour session 42%, week 31%, with reset times"/>
 </p>
 <p align="center"><em>The bar above the prompt in the Claude Code desktop app. In the terminal it is one line of text.</em></p>
 
@@ -105,10 +105,14 @@ When a chat is already big and you start something unrelated, re-reading the old
 
 `max` effort is always lowered to `xhigh`. Click **Max effort: High** above the bar to set your own ceiling: the choices appear beside it, the current one ticked, and **Done** closes them. The cap holds even with routing off.
 
-The **Autopilot: On** switch on the left of that row turns the whole mod off and on, in every chat at once. Off, Claude Code runs exactly as it would without Autopilot.
+The **Autopilot: On** switch on the left of that row turns the whole mod off and on, in every chat at once. Off, Claude Code runs exactly as it would without Autopilot, and the bar shrinks to the switch:
 
 <p align="center">
-  <img src="docs/banner-heavy.svg" width="730" alt="The bar on a heavy task: Opus · xhigh with the extra effort tag"/>
+  <img src="docs/banner-off.svg" width="730" alt="The bar switched off: only Autopilot: Off remains"/>
+</p>
+
+<p align="center">
+  <img src="docs/banner-heavy.svg" width="730" alt="The bar on a heavy task, Max effort opened: Low, Medium, High, a ticked Extra high and Done above a card showing Opus · xhigh with the Extra effort tag"/>
 </p>
 
 ### Extras
