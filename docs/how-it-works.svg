@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="470" viewBox="0 0 900 470" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+<style>
+.bg{fill:#fbfaf7;stroke:#e8e4da}.box{fill:#fff;stroke:#e0dbd0}.t1{fill:#26241f}.t2{fill:#7b776d}.ln{stroke:#b9b3a6}.band{fill:#f3efe6}
+.h{fill:#e8f3ec;stroke:#9fd0b0}.s{fill:#e9f0fb;stroke:#a7c1ea}.o{fill:#fbeee8;stroke:#e9b49c}
+@media (prefers-color-scheme: dark){.bg{fill:#1f1e1c;stroke:#3a3833}.box{fill:#2a2926;stroke:#45423c}.t1{fill:#efede7}.t2{fill:#a29e94}.ln{stroke:#6a665e}.band{fill:#2a2926}
+.h{fill:#1f3327;stroke:#3f7a55}.s{fill:#1f2a3d;stroke:#4a6ea8}.o{fill:#3a271f;stroke:#a8654a}}
+</style>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#b9b3a6"/></marker></defs>
+<rect class="bg" x="0.5" y="0.5" width="899" height="469" rx="18"/>
+<text class="t1" x="30" y="42" font-size="18" font-weight="700">How Autopilot routes each message</text>
+
+<rect class="box" x="30" y="110" width="170" height="74" rx="12"/>
+<text class="t1" x="115" y="142" font-size="15" font-weight="700" text-anchor="middle">Your message</text>
+<text class="t2" x="115" y="164" font-size="12.5" text-anchor="middle">typed in Claude Code</text>
+<line class="ln" x1="200" y1="147" x2="252" y2="147" stroke-width="2" marker-end="url(#a)"/>
+
+<rect class="box" x="255" y="100" width="210" height="94" rx="12"/>
+<text class="t1" x="360" y="132" font-size="15" font-weight="700" text-anchor="middle">Haiku check</text>
+<text class="t2" x="360" y="154" font-size="12.5" text-anchor="middle">rates the task in ~1–2 s</text>
+<text class="t2" x="360" y="174" font-size="12.5" text-anchor="middle">about 250 tokens</text>
+
+<path class="ln" d="M465 147 C 520 147 520 85 580 85" fill="none" stroke-width="2" marker-end="url(#a)"/>
+<line class="ln" x1="465" y1="147" x2="580" y2="147" stroke-width="2" marker-end="url(#a)"/>
+<path class="ln" d="M465 147 C 520 147 520 209 580 209" fill="none" stroke-width="2" marker-end="url(#a)"/>
+
+<rect class="h" x="583" y="62" width="290" height="48" rx="10"/>
+<text class="t1" x="600" y="83" font-size="14" font-weight="700">Haiku · low</text>
+<text class="t2" x="600" y="101" font-size="12">typos, renames, one-line edits, quick questions</text>
+<rect class="s" x="583" y="124" width="290" height="48" rx="10"/>
+<text class="t1" x="600" y="145" font-size="14" font-weight="700">Sonnet · low to high</text>
+<text class="t2" x="600" y="163" font-size="12">routine features, styling, tests, fixes</text>
+<rect class="o" x="583" y="186" width="290" height="48" rx="10"/>
+<text class="t1" x="600" y="207" font-size="14" font-weight="700">Opus · medium to xhigh</text>
+<text class="t2" x="600" y="225" font-size="12">planning, unclear bugs, refactors, security, 3D</text>
+
+<rect class="band" x="30" y="268" width="843" height="176" rx="14"/>
+<text class="t1" x="52" y="300" font-size="15" font-weight="700">Guards that keep running while Claude works</text>
+<g font-size="13">
+<text class="t1" x="52" y="334" font-weight="700">🔒 Model lock</text><text class="t2" x="200" y="334">Past ~30k chat tokens the model stays put, so the prompt cache is never thrown away.</text>
+<text class="t1" x="52" y="362" font-weight="700">⬆ Step up</text><text class="t2" x="200" y="362">Same command fails twice, or you say "still broken": one rung up, effort first, then Opus.</text>
+<text class="t1" x="52" y="390" font-weight="700">🧹 Fresh start</text><text class="t2" x="200" y="390">New task in a big chat: a short handoff note, a clean chat, your message re-sent.</text>
+<text class="t1" x="52" y="418" font-weight="700">⚡ Effort cap</text><text class="t2" x="200" y="418">max is always lowered to xhigh, or to your own ceiling from the ⚙ button.</text>
+</g>
+</svg>
