@@ -524,25 +524,26 @@ export const register: Register = on => {
     const left = list.filter(t => !t.done).length
     const toggle = (i: number) => () => saveTodos($, l => l.map((t, j) => (j === i ? L.tick(t) : t)))
     const unflag = (i: number) => () => saveTodos($, l => l.map(({ suggested: _, ...t }, j) => (j === i ? t : l[j]!)))
-    const todo = list.length > 0 && (
+    // Always shown, so ＋ is there before the first item; open and empty, it says how to start.
+    const todo = (
       <Box key="todo" flexDirection="column" borderStyle="round" borderDimColor paddingX="md" paddingY="sm" rowGap="sm">
         <Box key="head" flexDirection="row" justifyContent="space-between" alignItems="center">
-          <Button key="todo-bar" label={`To-Do List, ${left} left of ${list.length}, ${v.todoOpen ? 'open' : 'closed'}`} plain onPress={() => update($, view, x => ({ ...x, todoOpen: !x.todoOpen }))}>
-            <Text size="heading" weight="bold">To-Do List</Text><Text dimColor>{v.todoOpen ? '  ▾' : `  ▸  ${left} left`}</Text>
-          </Button>
+          {/* The desktop draws a Button's label alone, so labels carry the look; styled Text sits beside them. */}
+          <Button key="todo-bar" label={v.todoOpen ? '▾  To-Do List' : list.length ? `▸  To-Do List · ${left} left` : '▸  To-Do List'} plain onPress={() => update($, view, x => ({ ...x, todoOpen: !x.todoOpen }))} />
           <Button key="todo-add" label="＋" plain dimColor onPress={() => $.prompt.fill({ text: '/todo ' })} />
         </Box>
+        {v.todoOpen && list.length === 0 && <Text key="empty" dimColor>Nothing to do yet. Add one with ＋</Text>}
         {v.todoOpen && list.map((t, i) => (
           <Box key={`r${i}`} flexDirection="column">
             <Box key="line" flexDirection="row" justifyContent="space-between" alignItems="center">
-              <Button key={`t${i}`} label={`${t.done ? 'Done' : 'To do'}: ${t.text}`} plain onPress={toggle(i)}>
-                <Text color={t.done ? 'claude' : undefined} dimColor={!t.done}>{t.done ? '●' : '○'}</Text>
-                <Text strikethrough={t.done} dimColor={t.done} weight="medium">{`   ${t.text}`}</Text>
-                {t.suggested && !t.done ? <Text color="claude"> ●</Text> : ''}
-              </Button>
+              <Box key="item" flexDirection="row" alignItems="center" gap={1}>
+                <Button key={`t${i}`} label={t.done ? '●' : '○'} plain dimColor={!t.done} onPress={toggle(i)} />
+                <Text key="text" strikethrough={t.done} dimColor={t.done}>{t.text}</Text>
+                {t.suggested && !t.done && <Text key="flag" color="claude">●</Text>}
+              </Box>
               {t.suggested && !t.done && <Button key={`n${i}`} label="Not yet" plain dimColor onPress={unflag(i)} />}
             </Box>
-            {t.suggested && !t.done && <Text key="why" size="footnote" dimColor>{`      Claude thinks this is done: ${t.suggested}`}</Text>}
+            {t.suggested && !t.done && <Text key="why" size="footnote" dimColor>{`Claude thinks this is done: ${t.suggested}`}</Text>}
           </Box>
         ))}
         {v.todoOpen && list.some(t => t.done) && <Button key="clear" label="Clear finished" plain dimColor onPress={() => saveTodos($, l => l.filter(t => !t.done))} />}

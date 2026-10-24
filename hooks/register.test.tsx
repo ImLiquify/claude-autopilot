@@ -312,17 +312,20 @@ test('coding team: three agent types are registered and /team hands the goal to 
 test('to-dos: a card under the bar, opened with a click; a tick saves for every chat', async ($, on) => {
   const w = await boot($, on, { store: {} })
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', ...BAND })
-  expect(await ui.find({ type: 'Button', key: 'todo-bar' } as never)).toBeUndefined() // nothing to show yet
+  expect((await ui.find({ type: 'Button', key: 'todo-bar' } as never))?.props.label).toBe('▸  To-Do List') // shown empty, so ＋ is always there
+  expect(await ui.find({ type: 'Button', key: 'todo-add' } as never)).toBeDefined()
   await $.command.run({ command: 'todo', args: 'reply to Sam' } as never)
-  expect((await ui.find({ type: 'Button', key: 'todo-bar' } as never))?.props.label).toBe('To-Do List, 1 left of 1, closed')
+  expect((await ui.find({ type: 'Button', key: 'todo-bar' } as never))?.props.label).toBe('▸  To-Do List · 1 left')
   expect(await ui.find({ type: 'Button', key: 't0' } as never)).toBeUndefined() // collapsed
   await ui.press({ key: 'todo-bar' } as never)
+  expect((await ui.find({ type: 'Button', key: 'todo-bar' } as never))?.props.label).toBe('▾  To-Do List')
   await ui.press({ key: 't0' } as never)
-  expect((await ui.find({ type: 'Button', key: 't0' } as never))?.props.label).toBe('Done: reply to Sam')
+  expect((await ui.find({ type: 'Button', key: 't0' } as never))?.props.label).toBe('●')
+  expect((await ui.find({ type: 'Text', text: /reply to Sam/ } as never))?.props.strikethrough).toBe(true)
   expect(w.store!.todos).toEqual([{ text: 'reply to Sam', done: true }])
   w.store!.todos = [{ text: 'reply to Sam', done: true }, { text: 'added in another chat', done: false }]
   await w.clock!.advance(5_000) // the 5 s tick picks up another chat's change
-  expect((await ui.find({ type: 'Button', key: 't1' } as never))?.props.label).toBe('To do: added in another chat')
+  expect((await ui.find({ type: 'Button', key: 't1' } as never))?.props.label).toBe('○')
   await ui.unmount()
 })
 
