@@ -50,6 +50,8 @@ const syncTodos = async ($: $T) => {
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage' // what /usage reads: no model call, no tokens
 const POLL_MS = 30_000
 const CLASSIFY_PER_HOUR = 60
+// Read-only search helpers only: they find and list, the main chat judges. Summaries, guides and reviews keep their model.
+const SEARCH_HELPER = /explore|search|find|lookup|scan/i
 // The desktop app's chat box arrives as 'unclassified' (it cannot be attested as the terminal's Enter); meta notices stay out via isMeta.
 const MACHINE = /^\s*<[a-z][\w-]*[\s>]/i // wrapped machine messages (task notices, side-session events)
 
@@ -469,6 +471,9 @@ export const register: Register = on => {
     return yield* next(model === e.model && effort === e.effort ? e : { ...e, model, effort })
   })
 
+  // Search helpers run on Haiku unless a model was named.
+  on('agent.spawn', async ($, e, next) =>
+    e.model !== undefined || (await read($, view)).off || !SEARCH_HELPER.test(e.subagentType) ? next(e) : next({ ...e, model: models.haiku }))
 
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) {

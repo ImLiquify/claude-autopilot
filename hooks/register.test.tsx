@@ -103,10 +103,13 @@ test('prefix override skips the check, short follow-ups are checked too, machine
   expect(w.classified).toBe(1)
 })
 
-test('helper subagents keep their own model (no Haiku downgrade)', async ($, on) => {
+test('search helpers go to Haiku; other helpers and named models keep theirs', async ($, on) => {
   await boot($, on)
-  const r = await $.agent.spawn({ subagentType: 'Explore', description: 'find files', prompt: 'x' } as never)
-  expect((r as { model: string }).model).toBe('x')
+  const spawn = async (a: object) => ((await $.agent.spawn({ description: 'd', prompt: 'x', ...a } as never)) as { model: string }).model
+  expect(await spawn({ subagentType: 'Explore' })).toBe('claude-haiku-5-5')
+  expect(await spawn({ subagentType: 'general-purpose' })).toBe('x')
+  expect(await spawn({ subagentType: 'claude-code-guide' })).toBe('x')
+  expect(await spawn({ subagentType: 'Explore', model: 'opus' })).toBe('opus')
 })
 
 test('escalation: the same command failing twice steps Opus medium up to Opus high', async ($, on) => {

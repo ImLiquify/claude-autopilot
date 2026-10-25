@@ -21,6 +21,7 @@ Most Claude Code sessions run every message on the same big model at the same ef
 Autopilot fixes that automatically. Install it once and keep working the way you do now.
 
 - **Right effort, every message.** A tiny Haiku check (about 250 tokens) rates each request. Every message runs on **Opus**, at low effort for quick jobs and up to high or xhigh for hard ones.
+- **Cheap search helpers.** Explore and search subagents run on Haiku: they only find and list, and the main chat does the thinking. Other helpers keep their own model.
 - **Cache-friendly by design.** In long chats the model is locked so the prompt cache is never thrown away.
 - **Always know where you stand.** Your 5-hour and weekly limits, with reset times, live above the prompt.
 - **Your choice, feature by feature.** A ⚙ settings card turns each part on or off, and a notice tells you when an update is out.
