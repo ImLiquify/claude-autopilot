@@ -20,7 +20,7 @@ Most Claude Code sessions run every message on the same big model at the same ef
 
 Autopilot fixes that automatically. Install it once and keep working the way you do now.
 
-- **Right model, every message.** A tiny Haiku check (about 250 tokens) rates each request and sends it to Haiku, Sonnet or Opus at the effort it actually needs.
+- **Right effort, every message.** A tiny Haiku check (about 250 tokens) rates each request. It never runs below **Opus · medium** and moves up to high or xhigh for hard work.
 - **Cache-friendly by design.** In long chats the model is locked so the prompt cache is never thrown away.
 - **Always know where you stand.** Your 5-hour and weekly limits, with reset times, live above the prompt.
 - **Your choice, feature by feature.** A ⚙ settings card turns each part on or off, and a notice tells you when an update is out.
@@ -63,16 +63,15 @@ Open a new chat. The bar appears above the prompt and routing is on. There is no
 
 ### 1. Every message gets the right model
 
-Before Claude starts on your message, Autopilot asks Haiku one question: *how hard is this?* Haiku answers with a model and an effort, and the turn runs on that.
+Before Claude starts on your message, Autopilot asks Haiku one question: *how hard is this?* The turn runs on the answer, but never below **Opus · medium**. Cheaper picks saved tokens and then cost re-prompts, so since 0.14.1 Autopilot only moves up.
 
 | You ask for | Autopilot picks |
 |---|---|
-| A typo, a rename, a one-line edit, a quick question | **Haiku · low** |
-| Routine features, styling, tests, ordinary bug fixes | **Sonnet · low to high** |
+| A typo, a quick question, routine features, ordinary bug fixes | **Opus · medium** |
 | Planning, architecture, unclear bugs, big refactors, security | **Opus · medium to high** |
 | Heavy animation, WebGL / 3D, many files at once | **Opus · xhigh** (shows ⚡ extra effort) |
 
-Short replies like "yes" or "go on" keep the model you're already on. The check is rate-limited to 60 an hour, and if it ever fails, the message keeps the current route (or Sonnet · medium on a first message).
+Short replies like "yes" or "go on" keep the model you're already on. The check is rate-limited to 60 an hour, and if it ever fails, the message keeps the current route (or Opus · medium on a first message). Want it cheaper? `/route sonnet` runs everything on Sonnet..
 
 ### 2. Long chats keep their cache
 
@@ -86,7 +85,7 @@ So once a chat passes about 30k tokens, Autopilot **locks the model**. Effort ca
 
 ### 3. It steps up when Claude is stuck
 
-Haiku's guess is checked against what actually happens. Autopilot moves **one rung up** (effort first, then Sonnet → Opus) when:
+Haiku's guess is checked against what actually happens. Autopilot moves **one rung up** in effort when:
 
 - the same command fails twice,
 - Claude keeps re-editing the same spot, or
@@ -141,7 +140,6 @@ When a chat starts, Autopilot compares its version with the one on GitHub. If Gi
 
 ### Extras
 
-- **Cheap helpers.** Explore, search and summary subagents run on Haiku unless a model is named.
 - **Coding team.** `/team <goal>` runs a builder, a tester and a reviewer agent in turn. The reviewer can send work back for up to 3 rounds.
 - **To-do list.** `/todo <text>` adds a task. A rounded *To-Do List* card appears under the bar: click its title to expand or collapse it, click a task to tick it, or `＋` to add one. The list is shared by all your chats. When Claude finishes work that looks like one of your tasks, it flags it with an orange dot and a one-line reason. You review it and tick it yourself, or press *Not yet*. Claude can read the list and flag items, but only you can tick them.
 
@@ -174,7 +172,7 @@ When a chat starts, Autopilot compares its version with the one on GitHub. If Gi
 The same information as one line above the prompt:
 
 ```text
-🤖 Sonnet · medium · normal task │ 5-hour session ▓▓▓░░░░░ 42% · resets in 2h 14m │ Week ▓▓░░░░░░ 31% · resets in 3d 20h
+🤖 Opus · medium · normal task │ 5-hour session ▓▓▓░░░░░ 42% · resets in 2h 14m │ Week ▓▓░░░░░░ 31% · resets in 3d 20h
 ```
 
 ---
@@ -231,10 +229,10 @@ Your to-do list and settings are kept in Claude Code's own plugin storage. Graph
 ## FAQ
 
 **Does the Haiku check cost more than it saves?**
-It's about 250 tokens on Haiku per message. One typo fix that runs on Haiku instead of Opus covers it many times over.
+It's about 250 tokens on Haiku per message. It picks the effort and spots new tasks, so a long chat can move to a fresh one, which is where most of the savings come from.
 
 **Will it ever pick a model that's too weak?**
-It's told to lean one step up on anything borderline. If Claude gets stuck, Autopilot steps up by itself, and you can always prefix `!opus`.
+No. On auto it never goes below Opus · medium. If Claude gets stuck, Autopilot steps up by itself, and you can always prefix `!opus` for high effort.
 
 **Can I turn it off?**
 Each feature has an On/Off button in ⚙ settings. The **Autopilot: On** switch turns the whole mod off in every chat. To remove it, run `/plugin` and uninstall it.

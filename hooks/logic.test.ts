@@ -136,3 +136,8 @@ test('newer: compares versions by number, never as text', () => {
   expect(L.newer('0.9.0', '0.13.3')).toBe(false)
   expect(L.newer('oops', '0.13.3')).toBe(false)
 })
+
+test('the auto floor lifts Haiku, Sonnet and low to Opus medium, and keeps higher effort', () => {
+  expect(L.atLeastOpusMedium(L.parseRoute('HAIKU LOW')!)).toMatchObject({ family: 'opus', effort: 'medium' })
+  expect(L.atLeastOpusMedium(L.parseRoute('SONNET XHIGH')!)).toMatchObject({ family: 'opus', effort: 'xhigh' })
+})

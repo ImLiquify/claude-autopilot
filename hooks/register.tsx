@@ -50,7 +50,6 @@ const syncTodos = async ($: $T) => {
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage' // what /usage reads: no model call, no tokens
 const POLL_MS = 30_000
 const CLASSIFY_PER_HOUR = 60
-const HELPER = /explore|search|summar|find|lookup|scan|guide/i
 // The desktop app's chat box arrives as 'unclassified' (it cannot be attested as the terminal's Enter); meta notices stay out via isMeta.
 const MACHINE = /^\s*<[a-z][\w-]*[\s>]/i // wrapped machine messages (task notices, side-session events)
 
@@ -411,7 +410,7 @@ export const register: Register = on => {
         const esc = current && L.COMPLAINT.test(p.text) ? L.escalate(current, 'you said it is still not right') : null
         const forced = runaway ? await freshStart($, p.text, chat, `this chat passed ${L.FRESH_TOKENS / 1000}k tokens (~${Math.round(chat / 1000)}k re-read per message)`, true) : undefined
         if (forced) {
-          await setRoute($, esc ?? current) // no Haiku call: the move is decided by size alone
+          await setRoute($, L.atLeastOpusMedium(esc ?? current ?? L.routeFor('NORMAL'))) // no Haiku call: the move is decided by size alone
           trace($, { event: 'fresh', reason: forced.drop.slice(0, 120) })
           return forced
         }
@@ -432,12 +431,12 @@ export const register: Register = on => {
           if (a?.isNew && !a.retry) {
             const dropped = await freshStart($, p.text, chat, pending)
             if (dropped) {
-              await setRoute($, a.route ?? current) // a fresh chat may switch model freely
+              await setRoute($, L.atLeastOpusMedium(a.route ?? current ?? L.routeFor('NORMAL'))) // a fresh chat may switch model freely
               trace($, { event: 'fresh', reason: dropped.drop.slice(0, 120) })
               return dropped
             }
           }
-          await setRoute($, keep(a?.route ?? current ?? L.routeFor('NORMAL', 'normal task (check unavailable)')))
+          await setRoute($, L.atLeastOpusMedium(keep(a?.route ?? current ?? L.routeFor('NORMAL', 'normal task (check unavailable)'))))
         }
       }
     } catch (err) {
@@ -457,7 +456,7 @@ export const register: Register = on => {
           model = models[v.route.family]
           effort = v.route.effort
         }
-        if (v.lock !== undefined && !/haiku/i.test(v.used?.model ?? '')) model = v.used?.model ?? e.model // locked: the model the chat's cache was written with
+        if (v.lock !== undefined && /opus/i.test(v.used?.model ?? '')) model = v.used?.model ?? e.model // locked: the model the chat's cache was written with; a Sonnet chat moves up to the floor
       }
       effort = L.capEffort(effort, v.maxEffort) // the cap holds even when routing is off
       const eff = effort === undefined ? undefined : String(effort)
@@ -470,9 +469,6 @@ export const register: Register = on => {
     return yield* next(model === e.model && effort === e.effort ? e : { ...e, model, effort })
   })
 
-  // Search, explore and summary helpers run on Haiku unless a model was named.
-  on('agent.spawn', async ($, e, next) =>
-    e.model !== undefined || (await read($, view)).off || !HELPER.test(e.subagentType) ? next(e) : next({ ...e, model: models.haiku }))
 
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) {
