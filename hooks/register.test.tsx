@@ -125,10 +125,10 @@ test('model lock: a 330k chat on Opus stays on Opus; effort still follows the ta
   expect(await step($)).toEqual({ model: 'claude-opus-5-5', effort: 'medium' })
   w.answer = 'TRIVIAL'
   await say($, 'What does the README say about the install command?')
-  expect(await step($)).toEqual({ model: 'claude-opus-5-5', effort: 'medium' })
+  expect(await step($)).toEqual({ model: 'claude-opus-5-5', effort: 'low' })
 })
 
-test('model lock: a long Sonnet chat moves up to the Opus floor', async ($, on) => {
+test('model lock: a long Sonnet chat moves up to Opus', async ($, on) => {
   await boot($, on, { answer: 'HARD', ctx: 245_000 })
   await say($, 'Plan the architecture of the new payments service')
   expect((await step($, 'medium', 'claude-sonnet-5-5')).model).toBe('claude-opus-5-5')
@@ -277,10 +277,10 @@ test('a prompt naming an image the app attached as text stays in the chat', asyn
   expect(w.commands).not.toContain('clear')
 })
 
-test('even the simplest prompts (Haiku says HAIKU LOW) run on Opus medium', async ($, on) => {
+test('even the simplest prompts (Haiku says HAIKU LOW) run on Opus, at low', async ($, on) => {
   await boot($, on, { answer: 'HAIKU LOW' })
   await say($, 'Fix the typo in the footer: Copyrigth')
-  expect(await step($)).toEqual({ model: 'claude-opus-5-5', effort: 'medium' })
+  expect(await step($)).toEqual({ model: 'claude-opus-5-5', effort: 'low' })
 })
 
 test('coding team: three agent types are registered and /team hands the goal to the chat', async ($, on) => {

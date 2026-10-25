@@ -410,7 +410,7 @@ export const register: Register = on => {
         const esc = current && L.COMPLAINT.test(p.text) ? L.escalate(current, 'you said it is still not right') : null
         const forced = runaway ? await freshStart($, p.text, chat, `this chat passed ${L.FRESH_TOKENS / 1000}k tokens (~${Math.round(chat / 1000)}k re-read per message)`, true) : undefined
         if (forced) {
-          await setRoute($, L.atLeastOpusMedium(esc ?? current ?? L.routeFor('NORMAL'))) // no Haiku call: the move is decided by size alone
+          await setRoute($, L.onOpus(esc ?? current ?? L.routeFor('NORMAL'))) // no Haiku call: the move is decided by size alone
           trace($, { event: 'fresh', reason: forced.drop.slice(0, 120) })
           return forced
         }
@@ -431,12 +431,12 @@ export const register: Register = on => {
           if (a?.isNew && !a.retry) {
             const dropped = await freshStart($, p.text, chat, pending)
             if (dropped) {
-              await setRoute($, L.atLeastOpusMedium(a.route ?? current ?? L.routeFor('NORMAL'))) // a fresh chat may switch model freely
+              await setRoute($, L.onOpus(a.route ?? current ?? L.routeFor('NORMAL'))) // a fresh chat may switch model freely
               trace($, { event: 'fresh', reason: dropped.drop.slice(0, 120) })
               return dropped
             }
           }
-          await setRoute($, L.atLeastOpusMedium(keep(a?.route ?? current ?? L.routeFor('NORMAL', 'normal task (check unavailable)'))))
+          await setRoute($, L.onOpus(keep(a?.route ?? current ?? L.routeFor('NORMAL', 'normal task (check unavailable)'))))
         }
       }
     } catch (err) {
@@ -456,7 +456,7 @@ export const register: Register = on => {
           model = models[v.route.family]
           effort = v.route.effort
         }
-        if (v.lock !== undefined && /opus/i.test(v.used?.model ?? '')) model = v.used?.model ?? e.model // locked: the model the chat's cache was written with; a Sonnet chat moves up to the floor
+        if (v.lock !== undefined && /opus/i.test(v.used?.model ?? '')) model = v.used?.model ?? e.model // locked: the model the chat's cache was written with; a Sonnet chat moves up to Opus
       }
       effort = L.capEffort(effort, v.maxEffort) // the cap holds even when routing is off
       const eff = effort === undefined ? undefined : String(effort)

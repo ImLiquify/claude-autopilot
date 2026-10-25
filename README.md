@@ -20,7 +20,7 @@ Most Claude Code sessions run every message on the same big model at the same ef
 
 Autopilot fixes that automatically. Install it once and keep working the way you do now.
 
-- **Right effort, every message.** A tiny Haiku check (about 250 tokens) rates each request. It never runs below **Opus · medium** and moves up to high or xhigh for hard work.
+- **Right effort, every message.** A tiny Haiku check (about 250 tokens) rates each request. Every message runs on **Opus**, at low effort for quick jobs and up to high or xhigh for hard ones.
 - **Cache-friendly by design.** In long chats the model is locked so the prompt cache is never thrown away.
 - **Always know where you stand.** Your 5-hour and weekly limits, with reset times, live above the prompt.
 - **Your choice, feature by feature.** A ⚙ settings card turns each part on or off, and a notice tells you when an update is out.
@@ -63,11 +63,12 @@ Open a new chat. The bar appears above the prompt and routing is on. There is no
 
 ### 1. Every message gets the right model
 
-Before Claude starts on your message, Autopilot asks Haiku one question: *how hard is this?* The turn runs on the answer, but never below **Opus · medium**. Cheaper picks saved tokens and then cost re-prompts, so since 0.14.1 Autopilot only moves up.
+Before Claude starts on your message, Autopilot asks Haiku one question: *how hard is this?* The answer sets the effort, and the model is always **Opus**. Cheaper models saved tokens but then cost re-prompts, so since 0.14.1 Haiku and Sonnet never write your answers.
 
 | You ask for | Autopilot picks |
 |---|---|
-| A typo, a quick question, routine features, ordinary bug fixes | **Opus · medium** |
+| A typo, a rename, a one-line edit, a quick question | **Opus · low** |
+| Routine features, styling, tests, ordinary bug fixes | **Opus · medium** |
 | Planning, architecture, unclear bugs, big refactors, security | **Opus · medium to high** |
 | Heavy animation, WebGL / 3D, many files at once | **Opus · xhigh** (shows ⚡ extra effort) |
 
@@ -232,7 +233,7 @@ Your to-do list and settings are kept in Claude Code's own plugin storage. Graph
 It's about 250 tokens on Haiku per message. It picks the effort and spots new tasks, so a long chat can move to a fresh one, which is where most of the savings come from.
 
 **Will it ever pick a model that's too weak?**
-No. On auto it never goes below Opus · medium. If Claude gets stuck, Autopilot steps up by itself, and you can always prefix `!opus` for high effort.
+No. On auto every message runs on Opus, and only the effort changes. If Claude gets stuck, Autopilot steps up by itself, and you can always prefix `!opus` for high effort.
 
 **Can I turn it off?**
 Each feature has an On/Off button in ⚙ settings. The **Autopilot: On** switch turns the whole mod off in every chat. To remove it, run `/plugin` and uninstall it.
