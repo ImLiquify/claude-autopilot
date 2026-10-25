@@ -38,7 +38,7 @@ async function boot($: Engine, on: On, w: Partial<World> = {}) {
   on('session.messages', () => ({ value: world.history.map(text => ({ role: 'user', text, toolUses: [] })) }) as never)
   on('session.id', () => ({ value: 'old-session' }) as never)
   on('fs.write', (_$, e) => (world.writes.push(e.path), (world.files[e.path] = String((e as { text?: unknown }).text ?? (e as { content?: unknown }).content ?? '')), { value: undefined }) as never)
-  on('fs.read', (_$, e) => ({ value: world.files[e.path] ?? (/plugin\.json$/.test(e.path) ? '{"version":"0.14.0"}' : undefined) }) as never)
+  on('fs.read', (_$, e) => ({ value: world.files[e.path] ?? (/plugin\.json$/.test(e.path) ? '{"version":"0.14.1"}' : undefined) }) as never)
   on('command.run', (_$, e) => (world.commands.push(e.command), { text: '' }) as never)
   on('session.append', async (_$, e, next) => (world.appended.push(JSON.stringify(e.message)), next(e)))
   on('prompt.fill', () => ({ isFilled: true }) as never)
@@ -419,4 +419,13 @@ test('no update notice when GitHub has the same version or updates are turned of
   await w.clock!.advance(10)
   expect(await ui.find({ type: 'Button', key: 'do-update' } as never)).toBeUndefined()
   await ui.unmount()
+})
+
+test('past 250k even "yes", "still broken" and a short reply move, with no Haiku call', async ($, on) => {
+  const w = await boot($, on, { answer: 'NORMAL SAME', ctx: 400_000, history: ['Finish the login page validation messages'] })
+  const before = w.classified
+  const r = await say($, 'yes')
+  expect(r).toMatchObject({ drop: expect.stringContaining('passed 250k') })
+  expect(w.classified).toBe(before)
+  expect(w.handoffModel).toBe('claude-sonnet-5-5')
 })

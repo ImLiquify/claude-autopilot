@@ -1,6 +1,6 @@
 {
   "name": "autopilot",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "description": "Picks the right model for each task, locks the model in long chats to keep the prompt cache, and shows live 5-hour and weekly usage above the prompt, runs a builder/tester/reviewer coding team (/team) and keeps a to-do list shared by all your chats (/todo). A ⚙ settings card turns each feature on or off, and it tells you when an update is out.",
   "author": {
     "name": "Mohamed Kaiser",
