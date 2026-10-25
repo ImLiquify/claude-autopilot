@@ -402,14 +402,14 @@ export const register: Register = on => {
       const blocked = busy || !!e.attachments?.length || L.mentionsFile(body)
       const canFresh = !blocked && chat > FRESH_AT
       const longOn = (await $.store.get('long')) !== 'off'
-      const runaway = !blocked && longOn && chat >= L.FORCE_FRESH_TOKENS
+      const runaway = !blocked && longOn && chat >= L.FRESH_TOKENS
       if (!busy && blocked && longOn && chat >= L.FRESH_TOKENS) $.ui.toast(`This chat is ~${Math.round(chat / 1000)}k tokens and every step re-reads it. Autopilot can't move a message with files to a fresh chat: type /clear, then attach again, to save tokens.`)
       if (v.mode === 'off') await setRoute($, null)
       else if (v.mode !== 'auto') await setRoute($, L.routeFor(v.mode === 'opus' ? 'HARD' : 'NORMAL', `/route ${v.mode}`))
       else if (p.force) await setRoute($, L.forced(p.force, current ?? L.routeFor('NORMAL')))
       else {
         const esc = current && L.COMPLAINT.test(p.text) ? L.escalate(current, 'you said it is still not right') : null
-        const forced = runaway ? await freshStart($, p.text, chat, `this chat passed ${L.FORCE_FRESH_TOKENS / 1000}k tokens (~${Math.round(chat / 1000)}k re-read per message)`, true) : undefined
+        const forced = runaway ? await freshStart($, p.text, chat, `this chat passed ${L.FRESH_TOKENS / 1000}k tokens (~${Math.round(chat / 1000)}k re-read per message)`, true) : undefined
         if (forced) {
           await setRoute($, esc ?? current) // no Haiku call: the move is decided by size alone
           trace($, { event: 'fresh', reason: forced.drop.slice(0, 120) })
@@ -424,18 +424,15 @@ export const register: Register = on => {
           // Never mid-task: a message sent while a turn runs is part of that task, so no fresh start then.
           const movable = canFresh && recent.length > 0 && !L.isFollowUp(p.text)
           const wantsFresh = movable && (await $.store.get('fresh')) !== 'off'
-          // Past FRESH_TOKENS the chat moves even on the same task: re-reading it costs more than a good note.
-          const tooLong = movable && chat >= L.FRESH_TOKENS && longOn
           const a = await classify($, p.text, wantsFresh)
           if (!L.isFollowUp(p.text)) recent = [...recent, p.text].slice(-3) // "yes" is not a task
           // Haiku saw the last request too: "it's not actually this" steps up like "still broken" does.
           const esc2 = a?.retry && current ? L.escalate(current, 'you said the last result was not right') : null
           if (esc2 && current) { await tryEscalate($, esc2, current, lock); return next(p.text === body ? e : { ...e, text: head + p.text }) }
-          if ((a?.isNew || tooLong) && !a?.retry) {
-            const midTask = !a?.isNew
-            const dropped = await freshStart($, p.text, chat, midTask ? `this chat passed ${L.FRESH_TOKENS / 1000}k tokens (~${Math.round(chat / 1000)}k re-read per message)` : pending, midTask)
+          if (a?.isNew && !a.retry) {
+            const dropped = await freshStart($, p.text, chat, pending)
             if (dropped) {
-              await setRoute($, a?.route ?? current) // a fresh chat may switch model freely
+              await setRoute($, a.route ?? current) // a fresh chat may switch model freely
               trace($, { event: 'fresh', reason: dropped.drop.slice(0, 120) })
               return dropped
             }

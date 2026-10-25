@@ -23,9 +23,8 @@ export const routeFor = (tier: Tier, why?: string): Route => {
 // The hard cap: `max` from any source becomes `xhigh`.
 // Fresh start between tasks once a chat is expensive to keep: whichever comes first of its size, what the last
 // turn cost against the 5-hour limit, or (upper bound) its share of the window. Returns the reason shown on the card.
+// Past this every message moves, "yes" and "still broken" too: each tool call re-reads the whole chat (one 650k prompt used 34% of a 5-hour limit).
 export const FRESH_TOKENS = 150_000
-// Past this even "yes" or "still broken" moves: every tool call re-reads the whole chat, so 400k+ chats ate whole limits.
-export const FORCE_FRESH_TOKENS = 250_000
 export const FRESH_COST_PCT = 1.5
 export const FRESH_SHARE = 0.4
 export const freshReason = (a: { ctx: number; window?: number; turnPct?: number }): string | undefined =>

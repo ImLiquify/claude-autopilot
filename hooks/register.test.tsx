@@ -369,10 +369,8 @@ test('the switch turns Autopilot off: the card goes, prompts and steps are left 
   await ui.unmount()
 })
 
-test('a very long chat starts fresh even on the same task, with Sonnet writing the note; "yes" and the setting keep it', async ($, on) => {
+test('a very long chat starts fresh even on the same task, with Sonnet writing the note', async ($, on) => {
   const w = await boot($, on, { answer: 'NORMAL SAME', ctx: 250_000, history: ['Finish the login page validation messages'] })
-  const yes = await say($, 'yes')
-  expect(yes).not.toMatchObject({ drop: expect.anything() })
   const r = await say($, 'Now make the error text red under each field')
   expect(r).toMatchObject({ drop: expect.stringContaining('passed 150k') })
   expect(w.handoffModel).toBe('claude-sonnet-5-5')
@@ -421,11 +419,11 @@ test('no update notice when GitHub has the same version or updates are turned of
   await ui.unmount()
 })
 
-test('past 250k even "yes", "still broken" and a short reply move, with no Haiku call', async ($, on) => {
+test('past 150k even "yes" moves, with no Haiku call', async ($, on) => {
   const w = await boot($, on, { answer: 'NORMAL SAME', ctx: 400_000, history: ['Finish the login page validation messages'] })
   const before = w.classified
   const r = await say($, 'yes')
-  expect(r).toMatchObject({ drop: expect.stringContaining('passed 250k') })
+  expect(r).toMatchObject({ drop: expect.stringContaining('passed 150k') })
   expect(w.classified).toBe(before)
   expect(w.handoffModel).toBe('claude-sonnet-5-5')
 })

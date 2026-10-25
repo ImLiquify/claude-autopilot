@@ -107,7 +107,7 @@ Either way, Autopilot:
 2. saves it under `autopilot/handoffs/`,
 3. clears the chat, carries the note over, and re-sends your message.
 
-**Nothing is deleted.** The note includes `claude --resume <id>` for the old chat. It never happens while Claude is still working, on short replies like "yes" or "still broken", or on a message with images or files attached (they could not be re-sent). The trade-off: the fresh chat knows only what the note says. Turn either case off in ⚙ settings.
+**Nothing is deleted.** The note includes `claude --resume <id>` for the old chat. It never happens while Claude is still working or on a message with images or files attached (they could not be re-sent; past 150k Autopilot shows a reminder to type /clear instead). A new task in a shorter chat never moves on short replies like "yes" or "still broken", but past 150k even those move, and the note quotes the question Claude last asked. The trade-off: the fresh chat knows only what the note says. Turn either case off in ⚙ settings.
 
 ### 5. Effort never runs away
 
