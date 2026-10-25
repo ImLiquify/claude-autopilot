@@ -128,3 +128,11 @@ test('Claude can flag an open to-do for review; ticking it settles the flag', ()
   expect(L.suggestDone(list, 9, 'x').text).toContain('There is no item 9.')
   expect(L.todoCmd(r.list, 'done 1').list[0]).toEqual({ text: 'Log book', done: true })
 })
+
+test('newer: compares versions by number, never as text', () => {
+  expect(L.newer('0.14.0', '0.13.3')).toBe(true)
+  expect(L.newer('0.13.10', '0.13.9')).toBe(true)
+  expect(L.newer('0.13.3', '0.13.3')).toBe(false)
+  expect(L.newer('0.9.0', '0.13.3')).toBe(false)
+  expect(L.newer('oops', '0.13.3')).toBe(false)
+})

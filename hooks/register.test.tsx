@@ -7,7 +7,7 @@ const U = { input_tokens: 300, output_tokens: 2, cache_read_input_tokens: 0, cac
 const BAND = { component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 12, bodyColumns: 120, scroll: { offset: 0, bodyRows: 12 }, view: {} } as never } as const
 const USAGE = (five: number) => `{"five_hour":{"utilization":${five},"resets_at":"2026-10-19T04:30:00+00:00"},"seven_day":{"utilization":74,"resets_at":"2026-10-22T06:00:00+00:00"}}`
 
-type World = { seen?: { model: string; effort?: unknown }; tool: { result: string; text: string; isError: boolean }; ctx: number; answer: string; five: number; fetches: number; classified: number; down?: boolean; history: string[]; writes: string[]; commands: string[]; appended: string[]; submitted: string[]; graphRuns: string[]; agents: string[]; hasGraph?: boolean; store?: Record<string, unknown>; files: Record<string, string>; clock?: ReturnType<typeof mock.clock> }
+type World = { seen?: { model: string; effort?: unknown }; tool: { result: string; text: string; isError: boolean }; ctx: number; answer: string; five: number; fetches: number; classified: number; down?: boolean; history: string[]; writes: string[]; commands: string[]; appended: string[]; submitted: string[]; graphRuns: string[]; agents: string[]; hasGraph?: boolean; remote?: string; handoffModel?: string; store?: Record<string, unknown>; files: Record<string, string>; clock?: ReturnType<typeof mock.clock> }
 
 async function boot($: Engine, on: On, w: Partial<World> = {}) {
   const world: World = { tool: { result: 'ok', text: 'ok', isError: false }, ctx: 1000, answer: 'NORMAL', five: 76, fetches: 0, classified: 0, history: [], writes: [], commands: [], appended: [], submitted: [], graphRuns: [], agents: [], hasGraph: true, files: {}, ...w }
@@ -20,10 +20,10 @@ async function boot($: Engine, on: On, w: Partial<World> = {}) {
   }
   on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: world.ctx, window: 200000 }, rateLimits: [] } }) as never)
   on('session.authorize', () => ({ value: { handle: 'h', kind: 'bearer' } }) as never)
-  on('http.fetch', () => (world.fetches++, { value: world.down ? { status: 429, ok: false, headers: {}, text: '' } : { status: 200, ok: true, headers: {}, text: USAGE(world.five) } }) as never)
+  on('http.fetch', (_$, e) => String((e as { url?: string }).url).includes('raw.githubusercontent') ? { value: { status: world.remote ? 200 : 404, ok: !!world.remote, headers: {}, text: world.remote ? `{"version":"${world.remote}"}` : '' } } as never : (world.fetches++, { value: world.down ? { status: 429, ok: false, headers: {}, text: '' } : { status: 200, ok: true, headers: {}, text: USAGE(world.five) } }) as never)
   on('command.register', (_$, e) => ({ value: { command: e.name } }) as never)
   on('model.complete', (_$, e) => String(e.system).includes('handoff note')
-    ? { value: { isAnswered: true, text: 'TOPIC: Old login page\n## Done\n- built the login form', usage: U } } as never
+    ? (world.handoffModel = e.model, { value: { isAnswered: true, text: 'TOPIC: Old login page\n## Done\n- built the login form', usage: U } }) as never
     : (world.classified++, { value: { isAnswered: true, text: world.answer, usage: U } }) as never)
   on('ui.toast', () => ({ value: undefined }) as never)
   on('agent.register', (_$, e) => (world.agents.push(e.name), { value: { agent: `autopilot:${e.name}` } }) as never)
@@ -38,7 +38,7 @@ async function boot($: Engine, on: On, w: Partial<World> = {}) {
   on('session.messages', () => ({ value: world.history.map(text => ({ role: 'user', text, toolUses: [] })) }) as never)
   on('session.id', () => ({ value: 'old-session' }) as never)
   on('fs.write', (_$, e) => (world.writes.push(e.path), (world.files[e.path] = String((e as { text?: unknown }).text ?? (e as { content?: unknown }).content ?? '')), { value: undefined }) as never)
-  on('fs.read', (_$, e) => ({ value: world.files[e.path] }) as never)
+  on('fs.read', (_$, e) => ({ value: world.files[e.path] ?? (/plugin\.json$/.test(e.path) ? '{"version":"0.14.0"}' : undefined) }) as never)
   on('command.run', (_$, e) => (world.commands.push(e.command), { text: '' }) as never)
   on('session.append', async (_$, e, next) => (world.appended.push(JSON.stringify(e.message)), next(e)))
   on('prompt.fill', () => ({ isFilled: true }) as never)
@@ -366,5 +366,57 @@ test('the switch turns Autopilot off: the card goes, prompts and steps are left 
   await ui.press({ key: 'power' } as never)
   expect(w.store!.off).toBe(false)
   expect(await ui.findAll({ type: 'Svg' } as never)).toHaveLength(1)
+  await ui.unmount()
+})
+
+test('a very long chat starts fresh even on the same task, with Sonnet writing the note; "yes" and the setting keep it', async ($, on) => {
+  const w = await boot($, on, { answer: 'NORMAL SAME', ctx: 250_000, history: ['Finish the login page validation messages'] })
+  const yes = await say($, 'yes')
+  expect(yes).not.toMatchObject({ drop: expect.anything() })
+  const r = await say($, 'Now make the error text red under each field')
+  expect(r).toMatchObject({ drop: expect.stringContaining('passed 150k') })
+  expect(w.handoffModel).toBe('claude-sonnet-5-5')
+})
+
+test('the long-chat limit can be turned off in settings', async ($, on) => {
+  const w = await boot($, on, { store: { long: 'off' }, answer: 'NORMAL SAME', ctx: 250_000, history: ['Finish the login page validation messages'] })
+  const r = await say($, 'Now make the error text red under each field')
+  await w.clock!.advance(1000)
+  expect(r).not.toMatchObject({ drop: expect.anything() })
+  expect(w.commands).not.toContain('clear')
+})
+
+test('settings: ⚙ beside ＋ opens a card of On/Off options saved for every chat', async ($, on) => {
+  const w = await boot($, on, { store: {} })
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', ...BAND })
+  expect(await ui.find({ type: 'Button', key: 'p-long-b' } as never)).toBeUndefined()
+  await ui.press({ key: 'prefs' } as never)
+  expect((await ui.find({ type: 'Button', key: 'p-long-b' } as never))?.props.label).toBe('● On')
+  await ui.press({ key: 'p-long-b' } as never)
+  expect(w.store!.long).toBe('off')
+  expect((await ui.find({ type: 'Button', key: 'p-long-b' } as never))?.props.label).toBe('○ Off')
+  await ui.press({ key: 'p-route-b' } as never)
+  expect(w.store!.mode).toBe('off')
+  await ui.press({ key: 'prefs-done' } as never)
+  expect(await ui.find({ type: 'Button', key: 'p-long-b' } as never)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('update notice: a newer version on GitHub shows Update, which runs the plugin update; same version shows nothing', async ($, on) => {
+  const w = await boot($, on, { store: {}, remote: '0.15.0' })
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', ...BAND })
+  await w.clock!.advance(10)
+  expect(await ui.find({ type: 'Text', text: /Autopilot 0\.15\.0 is out/ } as never)).toBeDefined()
+  await ui.press({ key: 'do-update' } as never)
+  expect(w.graphRuns.some(r => r.startsWith('claude plugin update autopilot@autopilot'))).toBe(true)
+  expect(await ui.find({ type: 'Button', key: 'do-update' } as never)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('no update notice when GitHub has the same version or updates are turned off', async ($, on) => {
+  const w = await boot($, on, { store: { updates: 'off' }, remote: '0.15.0' })
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', ...BAND })
+  await w.clock!.advance(10)
+  expect(await ui.find({ type: 'Button', key: 'do-update' } as never)).toBeUndefined()
   await ui.unmount()
 })

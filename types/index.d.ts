@@ -16,6 +16,10 @@ export type ApView = {
   pose?: 'idle' | 'think' | 'work' // the mascot: blinking, thinking, walking
   todoOpen?: boolean // the to-do card under the bar is expanded
   off?: boolean // the on/off switch: off, Autopilot leaves prompts, models and effort to the engine
+  prefsOpen?: boolean // the settings card (⚙ beside ＋) is expanded
+  prefs?: { fresh: boolean; long: boolean; graph: boolean; updates: boolean } // settings toggles, true = on
+  update?: string // a newer version on GitHub, shown as a notice with an Update button
+  updating?: boolean
 }
 
 export type ApTodo = { text: string; done: boolean; suggested?: string } // suggested: Claude's reason, awaiting review

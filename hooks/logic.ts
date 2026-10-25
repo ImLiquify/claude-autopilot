@@ -205,3 +205,11 @@ export const suggestDone = (list: readonly Todo[], n: number, why: string): { li
   return { list: list.map((x, j) => (j === n - 1 ? { ...x, suggested: reason } : x)), flagged: t.text,
     text: `Flagged "${t.text}" for the user to review. Tell them you think it is done and why; do not say it is ticked, they tick it themselves.` }
 }
+
+// "0.14.0" vs "0.13.3": true when a is a later version than b. Anything unparsable counts as not newer.
+export const newer = (a: string, b: string) => {
+  const x = a.split('.').map(Number), y = b.split('.').map(Number)
+  if ([...x, ...y].some(n => !Number.isInteger(n))) return false
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0)
+  return false
+}
