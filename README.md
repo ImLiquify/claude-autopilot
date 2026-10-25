@@ -5,8 +5,8 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue" alt="License: MIT"/></a>
   <img src="https://img.shields.io/badge/Claude%20Code-plugin-d97757" alt="Claude Code plugin"/>
-  <img src="https://img.shields.io/badge/version-0.11.0-informational" alt="Version 0.11.0"/>
-  <img src="https://img.shields.io/badge/tests-44%20passing-brightgreen" alt="44 tests passing"/>
+  <img src="https://img.shields.io/badge/version-0.14.0-informational" alt="Version 0.14.0"/>
+  <img src="https://img.shields.io/badge/tests-50%20passing-brightgreen" alt="50 tests passing"/>
 </p>
 
 <p align="center">
@@ -23,6 +23,9 @@ Autopilot fixes that automatically. Install it once and keep working the way you
 - **Right model, every message.** A tiny Haiku check (about 250 tokens) rates each request and sends it to Haiku, Sonnet or Opus at the effort it actually needs.
 - **Cache-friendly by design.** In long chats the model is locked so the prompt cache is never thrown away.
 - **Always know where you stand.** Your 5-hour and weekly limits, with reset times, live above the prompt.
+- **Your choice, feature by feature.** A ⚙ settings card turns each part on or off, and a notice tells you when an update is out.
+
+> **Before you install:** Autopilot is free and open source (MIT). It does make some model calls of its own, can clear a long chat and continue it in a fresh one, and talks to two web addresses. [What Autopilot does on your computer](#what-autopilot-does-on-your-computer) lists all of it.
 
 <p align="center">
   <img src="docs/banner-normal.svg" width="730" alt="The Autopilot bar: the Autopilot: On switch and Max effort above a card showing Sonnet · medium for a normal task, 5-hour session 42%, week 31%, with reset times"/>
@@ -91,15 +94,20 @@ Haiku's guess is checked against what actually happens. Autopilot moves **one ru
 
 In a very long chat, a model switch is refused if rewriting the cache would cost more than about $0.40. You get a toast explaining why, and `!opus` still forces it.
 
-### 4. Fresh starts for new tasks
+### 4. Fresh starts for new tasks and very long chats
 
-When a chat is already big and you start something unrelated, re-reading the old history on every message is pure waste. Autopilot:
+Every message re-sends the whole chat. A big chat therefore costs more on every message, and answers get vaguer as it grows. Autopilot moves you to a fresh chat in two cases:
 
-1. has Haiku write a short handoff note (what was done, files, decisions, next steps),
+- **A new task.** The chat is over about 60k tokens and Haiku judges your message to be unrelated to what came before. Haiku writes the handoff note.
+- **A very long chat.** The chat is over about 150k tokens, even if you are still on the same task. **Sonnet** writes this note, because the next chat continues from it alone, and it records what is half-done and in which files.
+
+Either way, Autopilot:
+
+1. writes a short handoff note (what was done, files, decisions, next steps),
 2. saves it under `autopilot/handoffs/`,
 3. clears the chat, carries the note over, and re-sends your message.
 
-**Nothing is deleted.** The note includes `claude --resume <id>` for the old chat. It never happens mid-task, or on a message with images or files attached. Turn it off any time with `/fresh off`.
+**Nothing is deleted.** The note includes `claude --resume <id>` for the old chat. It never happens while Claude is still working, on short replies like "yes" or "still broken", or on a message with images or files attached (they could not be re-sent). The trade-off: the fresh chat knows only what the note says. Turn either case off in ⚙ settings.
 
 ### 5. Effort never runs away
 
@@ -115,11 +123,27 @@ The **Autopilot: On** switch on the left of that row turns the whole mod off and
   <img src="docs/banner-heavy.svg" width="730" alt="The bar on a heavy task, Max effort opened: Low, Medium, High, a ticked Extra high and Done above a card showing Opus · xhigh with the Extra effort tag"/>
 </p>
 
+### 6. Settings
+
+The ⚙ to the right of ＋ on the to-do card opens a **Settings** card. Each option has an On/Off button, is saved for all your chats, and is on by default:
+
+| Option | What turning it off does |
+|---|---|
+| Pick the best model for each message | Claude uses the model you picked yourself. The effort cap still applies |
+| New chat when I start a different task | New tasks stay in the current chat |
+| New chat when a chat gets very long | Long chats keep growing until you clear them yourself |
+| Map each project so Claude reads fewer files | graphify is no longer run in your projects |
+| Tell me when an update is out | Autopilot stops checking GitHub for new versions |
+
+### 7. Update notices
+
+When a chat starts, Autopilot compares its version with the one on GitHub. If GitHub has a newer one, a small notice appears above the bar: **Autopilot 0.15.0 is out**, with **Update** and **Later**. Update runs `claude plugin marketplace update autopilot` and `claude plugin update autopilot@autopilot`; restart Claude Code afterwards to use the new version. If that fails, the notice tells you the command to run yourself. Later hides it for that chat. Nothing updates without your click.
+
 ### Extras
 
 - **Cheap helpers.** Explore, search and summary subagents run on Haiku unless a model is named.
 - **Coding team.** `/team <goal>` runs a builder, a tester and a reviewer agent in turn. The reviewer can send work back for up to 3 rounds.
-- **To-do list.** `/todo <text>` adds a task. A rounded *To-Do List* card appears under the bar: click its title to expand or collapse it, click a task to tick it, or `＋` to add one. The list is shared by all your chats. When Claude finishes work that looks like one of your tasks, it flags it with an orange dot and a one-line reason. You review it and tick it yourself, or press *Not yet*.
+- **To-do list.** `/todo <text>` adds a task. A rounded *To-Do List* card appears under the bar: click its title to expand or collapse it, click a task to tick it, or `＋` to add one. The list is shared by all your chats. When Claude finishes work that looks like one of your tasks, it flags it with an orange dot and a one-line reason. You review it and tick it yourself, or press *Not yet*. Claude can read the list and flag items, but only you can tick them.
 
 ---
 
@@ -161,9 +185,38 @@ The same information as one line above the prompt:
 - **Optional:** `node` on your PATH, for the lifetime-token count on the bar.
 - **Optional:** graphify. If it's installed, Autopilot builds and refreshes a code graph in each project after edits. This makes no model calls. Without graphify, this step is skipped.
 
-## Privacy
+## What Autopilot does on your computer
 
-Everything stays on your machine, in an `autopilot/` folder beside the installed plugin:
+A full list, so you know what you are installing.
+
+**Model calls it makes on your account** (these count toward your usage limits):
+
+| When | Model | Size |
+|---|---|---|
+| Each message you type (at most 60 an hour) | Haiku | about 250 tokens |
+| A fresh start for a new task | Haiku | reads the chat (up to about 50k tokens), writes up to 900 |
+| A fresh start for a very long chat | Sonnet | reads the chat (up to about 50k tokens), writes up to 900 |
+
+It also changes which model and effort your own messages run on. That is the point of the mod; ⚙ settings or the On/Off switch stop it.
+
+**Changes to your chats:** a fresh start clears the current chat and re-sends your message in a new one. The old chat stays saved and can be reopened with `claude --resume <id>`.
+
+**Web addresses it contacts:**
+
+| Address | Why | How often |
+|---|---|---|
+| `api.anthropic.com/api/oauth/usage` | Your 5-hour and weekly usage, the same numbers `/usage` shows. It uses your Claude sign-in, handled by Claude Code; the mod never sees your token | Every 5 seconds while Claude works, every 30 seconds otherwise |
+| `raw.githubusercontent.com/ImLiquify/claude-autopilot/...` | Checks for a newer version. Nothing about you is sent | Once per chat start (turn off in ⚙) |
+
+**Programs it runs:**
+
+| Program | Why | When |
+|---|---|---|
+| `node bin/lifetime.js` | Adds up your lifetime tokens from Claude Code's own files on your computer (`stats-cache.json` and chat logs). Only the total is shown; nothing is sent anywhere | After each reply |
+| `graphify update .` | Builds a code map in your project, in a `graphify-out/` folder inside it. No model calls | When a chat opens in a project with no map, and after Claude edits files (turn off in ⚙; skipped if graphify isn't installed) |
+| `claude plugin marketplace update` / `claude plugin update` | Installs an update | Only when you press **Update** |
+
+**Files it writes,** in an `autopilot/` folder beside the installed plugin, never sent anywhere:
 
 | File | What's in it |
 |---|---|
@@ -171,7 +224,9 @@ Everything stays on your machine, in an `autopilot/` folder beside the installed
 | `trace.json` | The last 40 routing decisions, with the first 60 characters of each prompt, for debugging |
 | `handoffs/` | The notes written at each fresh start |
 
-The only network calls are normal Claude requests (the Haiku check and the handoff note) and the usage endpoint that `/usage` itself reads.
+Your to-do list and settings are kept in Claude Code's own plugin storage. Graphify adds `graphify-out/` to each project, as described above.
+
+**What Claude sees:** a `todo` tool, so Claude can read your list and flag finished items, and the `autopilot:builder`, `autopilot:tester` and `autopilot:reviewer` agents used by `/team`.
 
 ## FAQ
 
@@ -182,7 +237,10 @@ It's about 250 tokens on Haiku per message. One typo fix that runs on Haiku inst
 It's told to lean one step up on anything borderline. If Claude gets stuck, Autopilot steps up by itself, and you can always prefix `!opus`.
 
 **Can I turn it off?**
-`/route off` for routing, `/fresh off` for fresh starts, or disable the plugin in `/plugin`.
+Each feature has an On/Off button in ⚙ settings. The **Autopilot: On** switch turns the whole mod off in every chat. To remove it, run `/plugin` and uninstall it.
+
+**Does it cost money?**
+The mod is free. Its own model calls, listed above, count toward your Claude usage like any other message.
 
 ## Development
 
