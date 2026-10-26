@@ -57,9 +57,13 @@ export const parseTier = (answer: string): Tier | undefined => {
   return TIERS.find(t => up.includes(t))
 }
 
-// Auto routing always runs on Opus, the model used before Autopilot: Haiku or Sonnet answers cost re-prompts.
-// Haiku's check still sets the effort, low to xhigh. /route sonnet and !sonnet skip this.
-export const onOpus = (r: Route): Route => ({ ...r, family: 'opus' })
+// Haiku names the setting that is just good enough; auto routing runs one rung above it, so a borderline pick never under-delivers.
+// Haiku stays Haiku (simple chores), Sonnet xhigh becomes Opus xhigh, and Opus xhigh, the top, stays put.
+export const stepUp = (r: Route): Route => {
+  if (r.family === 'haiku') return r
+  const i = EFFORTS.indexOf(r.effort)
+  return i < EFFORTS.length - 1 ? { ...r, effort: EFFORTS[i + 1]!, tier: TIERS[i + 1]! } : { ...r, family: 'opus' }
+}
 
 // Haiku names a model and an effort ("OPUS MEDIUM"): any pairing, so both models get every effort.
 // An old-style tier word ("HARD") still works.

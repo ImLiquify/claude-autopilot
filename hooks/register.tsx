@@ -56,10 +56,10 @@ const SEARCH_HELPER = /explore|search|find|lookup|scan/i
 const MACHINE = /^\s*<[a-z][\w-]*[\s>]/i // wrapped machine messages (task notices, side-session events)
 
 const SYSTEM = `You route coding requests to a model and an effort. Reply with two words: MODEL EFFORT.
-Balance output quality against cost, and lean one step up on anything borderline. Pick a lower setting only when it is far more than enough: the result would be just as good, with no real chance of a miss. If the lower setting would be merely good enough and the next one noticeably better or more reliable, take the next one. A wasted retry costs more than one step of extra effort.
-EFFORT: LOW only when the task is trivial and low is far more than enough (change a text string, a typo, a rename, a one-line edit, a simple question, chit-chat). MEDIUM when low might do but medium would be much safer, and for an ordinary feature, bug fix, tests, adjusting earlier work, anything with a few moving parts. HIGH for hard, ambiguous or high-stakes work. XHIGH only for the heaviest jobs.
-MODEL: HAIKU only when the job is so simple that Haiku's answer would be the same as Sonnet's (a typo, a text or colour change, a rename, a one-line edit, a plain factual question, chit-chat); if there is any doubt, SONNET. Answer it as HAIKU LOW.
-SONNET only when it is clearly enough (routine edits, styling, small features, well-known patterns). OPUS when Sonnet might be merely adequate and Opus would do noticeably better, and whenever the task needs deeper reasoning or judgment: planning or architecture, an unclear or intermittent bug, a big refactor, security work, a tricky algorithm, complex canvas/WebGL/3D or frame-by-frame animation, generating many files at once.
+Name the cheapest setting that is good enough to do the job well. Do not add a safety margin: the router always runs one step above your pick.
+EFFORT: LOW for small, clear tasks (a text string, a rename, a one-line edit, a simple question). MEDIUM for an ordinary feature, bug fix, tests, adjusting earlier work, anything with a few moving parts. HIGH for hard, ambiguous or high-stakes work. XHIGH only for the heaviest jobs.
+MODEL: HAIKU for simple chores where Haiku's answer would be the same as Sonnet's (start or restart the server, run a command, a typo, a text or colour change, a rename, a plain factual question, chit-chat); if there is any doubt, SONNET. Answer it as HAIKU LOW.
+SONNET when it is good enough (routine edits, styling, small features, well-known patterns). OPUS whenever the task needs deeper reasoning or judgment: planning or architecture, an unclear or intermittent bug, a big refactor, security work, a tricky algorithm, complex canvas/WebGL/3D or frame-by-frame animation, generating many files at once.
 Model and effort are independent. For a hard task prefer OPUS MEDIUM over SONNET HIGH (reasoning depth beats extra effort); use SONNET HIGH for a long but routine job. Any pairing is allowed.
 A very short reply ("yes", "go on", "do it") continues the previous request: rate that request, not the reply.
 If earlier requests are shown and the new one says the last result was wrong or not what they wanted (not a request for further changes or additions), add the word RETRY at the end.`
@@ -412,7 +412,7 @@ export const register: Register = on => {
         const esc = current && L.COMPLAINT.test(p.text) ? L.escalate(current, 'you said it is still not right') : null
         const forced = runaway ? await freshStart($, p.text, chat, `this chat passed ${L.FRESH_TOKENS / 1000}k tokens (~${Math.round(chat / 1000)}k re-read per message)`, true) : undefined
         if (forced) {
-          await setRoute($, L.onOpus(esc ?? current ?? L.routeFor('NORMAL'))) // no Haiku call: the move is decided by size alone
+          await setRoute($, esc ?? current ?? L.routeFor('NORMAL')) // no Haiku call: the move is decided by size alone (current is already stepped up)
           trace($, { event: 'fresh', reason: forced.drop.slice(0, 120) })
           return forced
         }
@@ -433,12 +433,12 @@ export const register: Register = on => {
           if (a?.isNew && !a.retry) {
             const dropped = await freshStart($, p.text, chat, pending)
             if (dropped) {
-              await setRoute($, L.onOpus(a.route ?? current ?? L.routeFor('NORMAL'))) // a fresh chat may switch model freely
+              await setRoute($, a.route ? L.stepUp(a.route) : current ?? L.routeFor('NORMAL')) // a fresh chat may switch model freely
               trace($, { event: 'fresh', reason: dropped.drop.slice(0, 120) })
               return dropped
             }
           }
-          await setRoute($, L.onOpus(keep(a?.route ?? current ?? L.routeFor('NORMAL', 'normal task (check unavailable)'))))
+          await setRoute($, keep(a?.route ? L.stepUp(a.route) : current ?? L.routeFor('NORMAL', 'normal task (check unavailable)'))) // only Haiku's fresh pick steps up: current already did
         }
       }
     } catch (err) {
@@ -458,7 +458,7 @@ export const register: Register = on => {
           model = models[v.route.family]
           effort = v.route.effort
         }
-        if (v.lock !== undefined && /opus/i.test(v.used?.model ?? '')) model = v.used?.model ?? e.model // locked: the model the chat's cache was written with; a Sonnet chat moves up to Opus
+        if (v.lock !== undefined) model = v.used?.model ?? e.model // locked: the model the chat's cache was written with
       }
       effort = L.capEffort(effort, v.maxEffort) // the cap holds even when routing is off
       const eff = effort === undefined ? undefined : String(effort)

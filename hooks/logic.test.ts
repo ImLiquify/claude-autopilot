@@ -137,7 +137,10 @@ test('newer: compares versions by number, never as text', () => {
   expect(L.newer('oops', '0.13.3')).toBe(false)
 })
 
-test('auto routing moves Haiku and Sonnet picks to Opus and keeps the effort', () => {
-  expect(L.onOpus(L.parseRoute('HAIKU LOW')!)).toMatchObject({ family: 'opus', effort: 'low' })
-  expect(L.onOpus(L.parseRoute('SONNET XHIGH')!)).toMatchObject({ family: 'opus', effort: 'xhigh' })
+test('auto routing runs one step above the Haiku pick, Haiku stays, the top stays', () => {
+  expect(L.stepUp(L.parseRoute('HAIKU LOW')!)).toMatchObject({ family: 'haiku', effort: 'low' })
+  expect(L.stepUp(L.parseRoute('SONNET LOW')!)).toMatchObject({ family: 'sonnet', effort: 'medium', tier: 'NORMAL' })
+  expect(L.stepUp(L.parseRoute('OPUS HIGH')!)).toMatchObject({ family: 'opus', effort: 'xhigh' })
+  expect(L.stepUp(L.parseRoute('SONNET XHIGH')!)).toMatchObject({ family: 'opus', effort: 'xhigh' })
+  expect(L.stepUp(L.parseRoute('OPUS XHIGH')!)).toMatchObject({ family: 'opus', effort: 'xhigh' })
 })

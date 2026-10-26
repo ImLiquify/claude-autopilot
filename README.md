@@ -64,7 +64,7 @@ Open a new chat. The bar appears above the prompt and routing is on. There is no
 
 ### 1. Every message gets the right model
 
-Before Claude starts on your message, Autopilot asks Haiku one question: *how hard is this?* The answer sets the effort, and the model is always **Opus**. Cheaper models saved tokens but then cost re-prompts, so since 0.14.1 Haiku and Sonnet never write your answers.
+Before Claude starts on your message, Autopilot asks Haiku one question: *what is just good enough for this?* Autopilot then runs **one step above** that pick, so a borderline call never gets a weak answer: Sonnet low becomes Sonnet medium, Opus high becomes Opus xhigh, and Opus xhigh stays at the top. Simple chores (start the server, a typo, a rename) run on Haiku itself.
 
 | You ask for | Autopilot picks |
 |---|---|
@@ -234,7 +234,7 @@ Your to-do list and settings are kept in Claude Code's own plugin storage. Graph
 It's about 250 tokens on Haiku per message. It picks the effort and spots new tasks, so a long chat can move to a fresh one, which is where most of the savings come from.
 
 **Will it ever pick a model that's too weak?**
-No. On auto every message runs on Opus, and only the effort changes. If Claude gets stuck, Autopilot steps up by itself, and you can always prefix `!opus` for high effort.
+No. On auto every message runs one step above what Haiku thinks is good enough, and Opus handles anything that needs deep reasoning. If Claude gets stuck, Autopilot steps up by itself, and you can always prefix `!opus` for high effort.
 
 **Can I turn it off?**
 Each feature has an On/Off button in ⚙ settings. The **Autopilot: On** switch turns the whole mod off in every chat. To remove it, run `/plugin` and uninstall it.

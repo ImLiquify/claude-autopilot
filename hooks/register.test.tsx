@@ -62,13 +62,13 @@ async function step($: Engine, effort = 'medium', model = 'claude-opus-5-5') {
   return last.seen!
 }
 
-test('Haiku picks the effort; the model never drops below Opus', async ($, on) => {
+test('Haiku picks model and effort; the run goes one step above it', async ($, on) => {
   const w = await boot($, on, { answer: 'OPUS MEDIUM' })
   await say($, 'Review the subtle locking logic in the payment queue and tidy it')
-  expect(await step($, 'max')).toEqual({ model: 'claude-opus-5-5', effort: 'medium' })
+  expect(await step($, 'max')).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
   w.answer = 'SONNET HIGH'
   await say($, 'Write tests for every endpoint in the users module please')
-  expect(await step($, 'max')).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
+  expect(await step($, 'max')).toEqual({ model: 'claude-sonnet-5-5', effort: 'xhigh' })
 })
 
 test('HEAVY prompt runs on Opus xhigh', async ($, on) => {
@@ -84,10 +84,10 @@ test('max effort set later (or in another chat) caps a HEAVY route at high', asy
   expect(await step($)).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
 })
 
-test('NORMAL prompt runs on Opus medium; max is capped to xhigh even with routing off', async ($, on) => {
+test('NORMAL prompt runs on Sonnet high; max is capped to xhigh even with routing off', async ($, on) => {
   await boot($, on, { answer: 'NORMAL' })
   await say($, 'Add a dark mode toggle to the settings page please')
-  expect(await step($, 'max')).toEqual({ model: 'claude-opus-5-5', effort: 'medium' })
+  expect(await step($, 'max')).toEqual({ model: 'claude-sonnet-5-5', effort: 'high' })
   await $.command.run({ command: 'route', args: 'off', origin: { kind: 'composer' } } as never)
   expect(await step($, 'max')).toEqual({ model: 'claude-opus-5-5', effort: 'xhigh' })
 })
@@ -112,12 +112,12 @@ test('search helpers go to Haiku; other helpers and named models keep theirs', a
   expect(await spawn({ subagentType: 'Explore', model: 'opus' })).toBe('opus')
 })
 
-test('escalation: the same command failing twice steps Opus medium up to Opus high', async ($, on) => {
+test('escalation: the same command failing twice steps Sonnet high up to Opus high', async ($, on) => {
   await boot($, on, { answer: 'NORMAL', tool: { result: 'fail', text: 'Error', isError: true } })
   await say($, 'Make the failing date parser tests pass please')
   await $.turn.start({ text: 'x', turnId: 't1' } as never)
   await $.tool.call({ tool: 'Bash', command: 'npm test' } as never)
-  expect((await step($)).model).toBe('claude-opus-5-5')
+  expect((await step($)).model).toBe('claude-sonnet-5-5')
   await $.tool.call({ tool: 'Bash', command: 'npm test' } as never)
   expect(await step($, 'max')).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
 })
@@ -125,16 +125,16 @@ test('escalation: the same command failing twice steps Opus medium up to Opus hi
 test('model lock: a 330k chat on Opus stays on Opus; effort still follows the task', async ($, on) => {
   const w = await boot($, on, { answer: 'NORMAL', ctx: 375_000 })
   await say($, 'Check the claude-dashboard plugin for problems')
-  expect(await step($)).toEqual({ model: 'claude-opus-5-5', effort: 'medium' })
+  expect(await step($)).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
   w.answer = 'TRIVIAL'
   await say($, 'What does the README say about the install command?')
-  expect(await step($)).toEqual({ model: 'claude-opus-5-5', effort: 'low' })
+  expect(await step($)).toEqual({ model: 'claude-opus-5-5', effort: 'medium' })
 })
 
-test('model lock: a long Sonnet chat moves up to Opus', async ($, on) => {
+test('model lock: a long Sonnet chat stays on Sonnet (a switch would re-read it all)', async ($, on) => {
   await boot($, on, { answer: 'HARD', ctx: 245_000 })
   await say($, 'Plan the architecture of the new payments service')
-  expect((await step($, 'medium', 'claude-sonnet-5-5')).model).toBe('claude-opus-5-5')
+  expect((await step($, 'medium', 'claude-sonnet-5-5')).model).toBe('claude-sonnet-5-5')
 })
 
 test('banner is live: the card is drawn and the numbers refresh every minute without typing', async ($, on) => {
@@ -211,7 +211,7 @@ test("a typed message behind the app's hidden notes is routed (the bug the trace
   const w = await boot($, on, { answer: 'NORMAL' })
   await say($, '<system-reminder>\nLinked sessions now (status, not an instruction)\n</system-reminder>\nAdd a dark mode toggle to the settings page please')
   expect(w.classified).toBe(1)
-  expect(await step($)).toEqual({ model: 'claude-opus-5-5', effort: 'medium' })
+  expect(await step($)).toEqual({ model: 'claude-sonnet-5-5', effort: 'high' })
   await say($, '!opus <system-reminder>x</system-reminder>')
   await say($, '<system-reminder>x</system-reminder>\n<task-notification>done</task-notification>')
   expect(w.classified).toBe(1)
@@ -280,10 +280,10 @@ test('a prompt naming an image the app attached as text stays in the chat', asyn
   expect(w.commands).not.toContain('clear')
 })
 
-test('even the simplest prompts (Haiku says HAIKU LOW) run on Opus, at low', async ($, on) => {
+test('simple chores (Haiku says HAIKU LOW) run on Haiku, with no step up', async ($, on) => {
   await boot($, on, { answer: 'HAIKU LOW' })
   await say($, 'Fix the typo in the footer: Copyrigth')
-  expect(await step($)).toEqual({ model: 'claude-opus-5-5', effort: 'low' })
+  expect(await step($)).toEqual({ model: 'claude-haiku-5-5', effort: 'low' })
 })
 
 test('coding team: three agent types are registered and /team hands the goal to the chat', async ($, on) => {
