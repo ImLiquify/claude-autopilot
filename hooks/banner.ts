@@ -26,7 +26,6 @@ const STYLE = `<style>
 @keyframes tap{50%{transform:translateY(4px)}}
 @keyframes dot{0%,100%{opacity:.2}50%{opacity:1}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important}}
-.slot{fill:#f2ede3}@media (prefers-color-scheme: dark){.slot{fill:#2d2b27}}
 </style>`
 
 // The pixel Claude mascot beside a laptop seen from the side, on an 18 x 8 grid. Idle: the lid is shut.
@@ -89,16 +88,15 @@ ${bar(42, week)}
 }
 
 // Minimized: one 24px row (with the app's 10px padding the strip matches the 44px chat box) of separate pieces the row spreads across the strip:
-// the crab in its slot with the model, the 5-hour and week meters, lifetime tokens, with thin dividers between.
+// the crab with the model, the 5-hour and week meters, lifetime tokens, with thin dividers between.
 const mini = (w: number, body: string, h = 24) => `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${STYLE}${body}</svg>`
 
 // The original crab on 3.2px blocks (4 screen pixels at 125% Windows scaling), with 8px above it for the
 // thinking dots and the bob. The other pieces are 24 tall and the row centres them against it.
 export const miniCrab = (title: string, pose: Pose = 'idle') => {
   const t = clip(title, 24)
-  return mini(Math.round(80 + t.length * 7.5), `<rect class="slot" x="0" y="0" width="64" height="33.6" rx="16.8"/>
-<g transform="translate(3.2 8)">${robot(0, 0, pose, 3.2, true)}</g>
-<text class="t1" x="74" y="22" font-size="13" font-weight="600" ${FONT}>${esc(t)}</text>`, 33.6)
+  return mini(Math.round(80 + t.length * 7.5), `<g transform="translate(0 8)">${robot(0, 0, pose, 3.2, true)}</g>
+<text class="t1" x="68" y="22" font-size="13" font-weight="600" ${FONT}>${esc(t)}</text>`, 33.6)
 }
 
 export const miniMeter = (m: Meter) => {

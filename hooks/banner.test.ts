@@ -4,7 +4,8 @@ import { bannerSvg, chipOf, meterOf, miniCrab, miniMeter, miniTokens, routeLine,
 
 test('the minimized row: crab with the model, meters, lifetime tokens, each 24px tall', async () => {
   const crab = miniCrab('Opus · low', 'work')
-  for (const s of ['Opus · low', 'class="slot"', 'class="tap"']) expect(crab).toContain(s)
+  for (const s of ['Opus · low', 'class="tap"']) expect(crab).toContain(s)
+  expect(crab).not.toContain('slot') // no background behind the crab
   const meter = miniMeter({ label: '5-hour', pct: 91, sub: 'resets in 12m' })
   for (const s of ['5-hour', '91%', '#e5484d', 'height="24"']) expect(meter).toContain(s)
   expect(miniMeter({ label: 'Week', sub: 'loading…' })).toContain('…')

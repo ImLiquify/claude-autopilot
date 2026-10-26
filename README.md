@@ -156,7 +156,7 @@ The ⚙ to the right of ＋ on the to-do card opens a **Settings** card. Everyth
 
 ### 7. Update notices
 
-When a chat starts, Autopilot compares its version with the one on GitHub. If GitHub has a newer one, a small notice appears above the bar: **Autopilot 0.16.0 is out**, with **Update** and **Later**. Update runs `claude plugin marketplace update autopilot` and `claude plugin update autopilot@autopilot`; restart Claude Code afterwards to use the new version. If that fails, the notice tells you the command to run yourself. Later hides it for that chat. Nothing updates without your click.
+When a chat starts, Autopilot compares its version with the one on GitHub. If GitHub has a newer one, a small notice appears above the bar: **Autopilot 0.16.1 is out**, with **Update** and **Later**. Update runs `claude plugin marketplace update autopilot` and `claude plugin update autopilot@autopilot`; restart Claude Code afterwards to use the new version. If that fails, the notice tells you the command to run yourself. Later hides it for that chat. Nothing updates without your click.
 
 ### Extras
 
