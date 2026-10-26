@@ -7,7 +7,7 @@ const U = { input_tokens: 300, output_tokens: 2, cache_read_input_tokens: 0, cac
 const BAND = { component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 12, bodyColumns: 120, scroll: { offset: 0, bodyRows: 12 }, view: {} } as never } as const
 const USAGE = (five: number) => `{"five_hour":{"utilization":${five},"resets_at":"2026-10-19T04:30:00+00:00"},"seven_day":{"utilization":74,"resets_at":"2026-10-22T06:00:00+00:00"}}`
 
-type World = { seen?: { model: string; effort?: unknown }; tool: { result: string; text: string; isError: boolean }; ctx: number; answer: string; five: number; fetches: number; classified: number; down?: boolean; history: string[]; writes: string[]; commands: string[]; appended: string[]; submitted: string[]; graphRuns: string[]; agents: string[]; hasGraph?: boolean; remote?: string; handoffModel?: string; store?: Record<string, unknown>; files: Record<string, string>; clock?: ReturnType<typeof mock.clock> }
+type World = { seen?: { model: string; effort?: unknown }; tool: { result: string; text: string; isError: boolean }; ctx: number; answer: string; five: number; fetches: number; classified: number; down?: boolean; history: string[]; writes: string[]; commands: string[]; appended: string[]; submitted: string[]; graphRuns: string[]; agents: string[]; hasGraph?: boolean; isRepo?: boolean; remote?: string; handoffModel?: string; store?: Record<string, unknown>; files: Record<string, string>; clock?: ReturnType<typeof mock.clock> }
 
 async function boot($: Engine, on: On, w: Partial<World> = {}) {
   const world: World = { tool: { result: 'ok', text: 'ok', isError: false }, ctx: 1000, answer: 'NORMAL', five: 76, fetches: 0, classified: 0, history: [], writes: [], commands: [], appended: [], submitted: [], graphRuns: [], agents: [], hasGraph: true, files: {}, ...w }
@@ -43,7 +43,7 @@ async function boot($: Engine, on: On, w: Partial<World> = {}) {
   on('session.append', async (_$, e, next) => (world.appended.push(JSON.stringify(e.message)), next(e)))
   on('prompt.fill', () => ({ isFilled: true }) as never)
   on('session.cwd', () => ({ value: 'C:/xampp/htdocs/Demo' }) as never)
-  on('fs.exists', () => ({ value: !!world.hasGraph }) as never)
+  on('fs.exists', (_$, e) => ({ value: /\.git$/.test(e.path) ? world.isRepo !== false : !!world.hasGraph }) as never)
   on('process.run', (_$, e) => (e.argv[0] === 'node' || world.graphRuns.push(`${e.argv.join(' ')} @ ${e.init?.cwd}`), { value: { exitCode: 0, stdout: '', stderr: '' } }) as never)
   on('tool.call', () => world.tool as never)
   on('turn.step', async function* (_$, e) {
@@ -372,20 +372,85 @@ test('the long-chat limit can be turned off in settings', async ($, on) => {
   expect(w.commands).not.toContain('clear')
 })
 
-test('settings: ⚙ beside ＋ opens a card of On/Off options saved for every chat', async ($, on) => {
+test('settings: ⚙ beside ＋ opens a card of On/Off options and sizes, saved for every chat; reset puts the defaults back', async ($, on) => {
   const w = await boot($, on, { store: {} })
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', ...BAND })
-  expect(await ui.find({ type: 'Button', key: 'p-long-b' } as never)).toBeUndefined()
+  expect(await ui.find({ type: 'Button', key: 'p-ask-b' } as never)).toBeUndefined()
   await ui.press({ key: 'prefs' } as never)
-  expect((await ui.find({ type: 'Button', key: 'p-long-b' } as never))?.props.label).toBe('● On')
-  await ui.press({ key: 'p-long-b' } as never)
-  expect(w.store!.long).toBe('off')
-  expect((await ui.find({ type: 'Button', key: 'p-long-b' } as never))?.props.label).toBe('○ Off')
+  expect((await ui.find({ type: 'Button', key: 'p-ask-b' } as never))?.props.label).toBe('○ Off') // automatic by default
+  expect((await ui.find({ type: 'Button', key: 'p-stepup-b' } as never))?.props.label).toBe('● On')
+  await ui.press({ key: 'p-ask-b' } as never)
+  expect(w.store!.ask).toBe('on')
+  expect((await ui.find({ type: 'Button', key: 'longAt-150000' } as never))?.props.label).toBe('✓ Normal')
+  await ui.press({ key: 'longAt-0' } as never)
+  expect(w.store!.longAt).toBe(0)
+  expect((await ui.find({ type: 'Button', key: 'longAt-0' } as never))?.props.label).toBe('✓ Never')
   await ui.press({ key: 'p-route-b' } as never)
   expect(w.store!.mode).toBe('off')
+  await ui.press({ key: 'reset-b' } as never)
+  expect(w.store).toMatchObject({ ask: 'off', longAt: 150_000, mode: 'auto', maxEffort: 'xhigh' })
   await ui.press({ key: 'prefs-done' } as never)
-  expect(await ui.find({ type: 'Button', key: 'p-long-b' } as never)).toBeUndefined()
+  expect(await ui.find({ type: 'Button', key: 'p-ask-b' } as never)).toBeUndefined()
   await ui.unmount()
+})
+
+test('ask first: the note waits in a card; Keep going sends the message here, nothing is cleared', async ($, on) => {
+  const w = await boot($, on, { store: { ask: 'on' }, answer: 'NORMAL NEW', ctx: 150_000, history: ['Finish the login page validation messages'] })
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', ...BAND })
+  const r = await say($, 'Now write a CSV export for the reports screen')
+  expect(r).toMatchObject({ drop: expect.stringContaining('suggests a new chat') })
+  await w.clock!.advance(1000)
+  expect(w.commands).not.toContain('clear')
+  expect(await ui.find({ type: 'Text', text: /built the login form/ } as never)).toBeDefined()
+  await ui.press({ key: 'keep' } as never)
+  await w.clock!.advance(100)
+  expect(w.submitted).toContain('Now write a CSV export for the reports screen')
+  expect(w.commands).not.toContain('clear')
+  expect(await ui.find({ type: 'Button', key: 'keep' } as never)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('ask first: Start fresh clears and carries the note', async ($, on) => {
+  const w = await boot($, on, { store: { ask: 'on' }, answer: 'NORMAL NEW', ctx: 150_000, history: ['Finish the login page validation messages'] })
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', ...BAND })
+  await say($, 'Now write a CSV export for the reports screen')
+  await ui.press({ key: 'fresh' } as never)
+  for (let i = 0; i < 50 && !w.submitted.includes('Now write a CSV export for the reports screen'); i++) await w.clock!.advance(10)
+  expect(w.commands).toContain('clear')
+  expect(w.appended.some(a => a.includes('Handoff note from the previous chat'))).toBe(true)
+  await ui.unmount()
+})
+
+test('settings sizes: a new-task fresh start set to Never stays in the chat', async ($, on) => {
+  const w = await boot($, on, { store: { freshAt: 0 }, answer: 'NORMAL NEW', ctx: 150_000, history: ['Finish the login page validation messages'] })
+  const r = await say($, 'Now write a CSV export for the reports screen')
+  await w.clock!.advance(1000)
+  expect(r).not.toMatchObject({ drop: expect.anything() })
+  expect(w.commands).not.toContain('clear')
+})
+
+test('settings: search helpers keep their model and stuck turns stay put when those are off', async ($, on) => {
+  await boot($, on, { store: { helpers: 'off', stepup: 'off' }, answer: 'NORMAL', tool: { result: 'fail', text: 'Error: date parser broke on leap years', isError: true } })
+  expect(((await $.agent.spawn({ description: 'd', prompt: 'x', subagentType: 'Explore' } as never)) as { model: string }).model).toBe('x')
+  await say($, 'Make the failing date parser tests pass please')
+  await $.turn.start({ text: 'x', turnId: 't1' } as never)
+  await $.tool.call({ tool: 'Bash', command: 'npm test' } as never)
+  await $.tool.call({ tool: 'Bash', command: 'npm test' } as never)
+  expect(await step($)).toEqual({ model: 'claude-sonnet-5-5', effort: 'high' })
+})
+
+test('graphify: skipped in a folder that is not a repository and has no map', async ($, on) => {
+  const w = await boot($, on, { hasGraph: false, isRepo: false })
+  await w.clock!.advance(10)
+  expect(w.graphRuns).toEqual([])
+})
+
+test('graphify: in a repository graphify-out/ goes in the local git ignore list', async ($, on) => {
+  const exclude = 'C:\\xampp\\htdocs\\Demo\\.git\\info\\exclude' // the engine hands paths over in the system's own form
+  const w = await boot($, on, { hasGraph: false, files: { [exclude]: '# local ignores\n' } })
+  await w.clock!.advance(10)
+  expect(w.graphRuns).toEqual(['graphify update . @ C:/xampp/htdocs/Demo'])
+  expect(w.files[exclude]).toBe('# local ignores\ngraphify-out/\n')
 })
 
 test('update notice: a newer version on GitHub shows Update, which runs the plugin update; same version shows nothing', async ($, on) => {

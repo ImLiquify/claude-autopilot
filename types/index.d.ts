@@ -17,7 +17,9 @@ export type ApView = {
   todoOpen?: boolean // the to-do card under the bar is expanded
   off?: boolean // the on/off switch: off, Autopilot leaves prompts, models and effort to the engine
   prefsOpen?: boolean // the settings card (⚙ beside ＋) is expanded
-  prefs?: { fresh: boolean; long: boolean; graph: boolean; updates: boolean } // settings toggles, true = on
+  prefs?: Record<string, boolean | number> // settings: switches (true = on) and sizes in tokens (0 = never)
+  offer?: { text: string; body: string; topic: string; oldId: string; why: string } // a fresh start waiting for Start fresh / Keep going
+  usageDown?: boolean // usage reads keep failing: old figures show as unavailable
   update?: string // a newer version on GitHub, shown as a notice with an Update button
   updating?: boolean
 }

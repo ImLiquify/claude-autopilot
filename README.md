@@ -6,7 +6,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue" alt="License: MIT"/></a>
   <img src="https://img.shields.io/badge/Claude%20Code-plugin-d97757" alt="Claude Code plugin"/>
   <img src="https://img.shields.io/badge/version-0.14.0-informational" alt="Version 0.14.0"/>
-  <img src="https://img.shields.io/badge/tests-50%20passing-brightgreen" alt="50 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-63%20passing-brightgreen" alt="63 tests passing"/>
 </p>
 
 <p align="center">
@@ -68,12 +68,12 @@ Before Claude starts on your message, Autopilot asks Haiku one question: *what i
 
 | You ask for | Autopilot picks |
 |---|---|
-| A typo, a rename, a one-line edit, a quick question | **Opus · low** |
-| Routine features, styling, tests, ordinary bug fixes | **Opus · medium** |
-| Planning, architecture, unclear bugs, big refactors, security | **Opus · medium to high** |
+| Start the server, a typo, a rename, a quick question | **Haiku · low** |
+| Routine features, styling, tests, ordinary bug fixes | **Sonnet · medium to high** |
+| Planning, architecture, unclear bugs, big refactors, security | **Opus · high to xhigh** |
 | Heavy animation, WebGL / 3D, many files at once | **Opus · xhigh** (shows ⚡ extra effort) |
 
-Short replies like "yes" or "go on" keep the model you're already on. The check is rate-limited to 60 an hour, and if it ever fails, the message keeps the current route (or Opus · medium on a first message). Want it cheaper? `/route sonnet` runs everything on Sonnet..
+Short replies like "yes" or "go on" keep the model you're already on. The check is rate-limited to 60 an hour, and if it ever fails, the message keeps the current route (or Sonnet · medium on a first message). Want it cheaper? `/route sonnet` runs everything on Sonnet.
 
 ### 2. Long chats keep their cache
 
@@ -102,13 +102,19 @@ Every message re-sends the whole chat. A big chat therefore costs more on every 
 - **A new task.** The chat is over about 60k tokens and Haiku judges your message to be unrelated to what came before. Haiku writes the handoff note.
 - **A very long chat.** The chat is over about 150k tokens, even if you are still on the same task. **Sonnet** writes this note, because the next chat continues from it alone, and it records what is half-done and in which files.
 
+Both sizes can be changed in ⚙ Settings (Sooner, Normal, Later or Never). They count only the conversation, not the roughly 45k tokens of setup every chat starts with.
+
+The message that announces a fresh start may give a different reason, such as "one message used 1.6% of your 5-hour limit" or "chat was 40% of the window". Those only explain why the chat had become expensive. They never start a fresh chat on their own; only the two sizes above do.
+
 Either way, Autopilot:
 
 1. writes a short handoff note (what was done, files, decisions, next steps),
 2. saves it under `autopilot/handoffs/`,
 3. clears the chat, carries the note over, and re-sends your message.
 
-**Nothing is deleted.** The note includes `claude --resume <id>` for the old chat. It never happens while Claude is still working or on a message with images or files attached (they could not be re-sent; past 150k Autopilot shows a reminder to type /clear instead). A new task in a shorter chat never moves on short replies like "yes" or "still broken", but past 150k even those move, and the note quotes the question Claude last asked. The trade-off: the fresh chat knows only what the note says. Turn either case off in ⚙ settings.
+This happens by itself. If you would rather check first, turn on **Ask me before moving to a new chat** in ⚙ Settings. The note then appears in a card with two buttons: **Start fresh** moves you, **Keep going here** sends your message in the current chat and stops asking for the rest of that chat.
+
+**Nothing is deleted.** The note includes `claude --resume <id>` for the old chat. It never happens while Claude is still working or on a message with images or files attached (they could not be re-sent; past 150k Autopilot shows a reminder to type /clear instead). A new task in a shorter chat never moves on short replies like "yes" or "still broken", but past 150k even those move, and the note quotes the question Claude last asked. The trade-off: the fresh chat knows only what the note says. Set either case to Never in ⚙ Settings.
 
 ### 5. Effort never runs away
 
@@ -126,15 +132,27 @@ The **Autopilot: On** switch on the left of that row turns the whole mod off and
 
 ### 6. Settings
 
-The ⚙ to the right of ＋ on the to-do card opens a **Settings** card. Each option has an On/Off button, is saved for all your chats, and is on by default:
+The ⚙ to the right of ＋ on the to-do card opens a **Settings** card. Everything is saved for all your chats at once. **Reset to defaults** at the bottom puts every option back.
 
-| Option | What turning it off does |
-|---|---|
-| Pick the best model for each message | Claude uses the model you picked yourself. The effort cap still applies |
-| New chat when I start a different task | New tasks stay in the current chat |
-| New chat when a chat gets very long | Long chats keep growing until you clear them yourself |
-| Map each project so Claude reads fewer files | graphify is no longer run in your projects |
-| Tell me when an update is out | Autopilot stops checking GitHub for new versions |
+**Switches**, each with an On/Off button:
+
+| Option | On (default shown in brackets) | Off |
+|---|---|---|
+| Pick the best model for each message (On) | Autopilot picks the model and effort | Claude uses the model you picked yourself. The effort cap still applies |
+| Ask me before moving to a new chat (Off) | A card shows the note first; you choose | The move happens by itself |
+| Try harder by itself when Claude gets stuck (On) | Effort, then the model, goes up one step when you say it's wrong or a command keeps failing | Stays where it is until you type `!high` or `!opus` |
+| Use the cheapest model for file searches (On) | Search helpers run on Haiku | Search helpers use your main model: costs more, searches slightly better |
+| Map each project so Claude reads fewer files (On) | graphify keeps a code map of each project | No map is made or updated |
+| Keep a log of why each model was picked (On) | `trace.json` keeps the last 40 decisions, with the first 60 characters of each message | Nothing is logged |
+| Tell me when an update is out (On) | Checks GitHub once per chat | No check |
+
+**Sizes**, each a row of choices. The line under each row shows the exact number:
+
+| Option | Choices (default **bold**) | What it means |
+|---|---|---|
+| Start a new chat when this one gets long | Sooner (100k) · **Normal (150k)** · Later (250k) · Never | Claude re-reads the whole chat for every message, so long chats cost more each time |
+| Start a new chat when I switch to a different task | Sooner (40k) · **Normal (60k)** · Later (100k) · Never | Only for a new, unrelated task |
+| Stop switching models once a chat is | Short (15k) · **Medium (30k)** · Long (60k) | Switching models in a long chat costs about as much as 30 normal messages. Effort can still change |
 
 ### 7. Update notices
 
@@ -205,7 +223,7 @@ It also changes which model and effort your own messages run on. That is the poi
 
 | Address | Why | How often |
 |---|---|---|
-| `api.anthropic.com/api/oauth/usage` | Your 5-hour and weekly usage, the same numbers `/usage` shows. It uses your Claude sign-in, handled by Claude Code; the mod never sees your token | Every 5 seconds while Claude works, every 30 seconds otherwise |
+| `api.anthropic.com/api/oauth/usage` | Your 5-hour and weekly usage, the same numbers `/usage` shows. It uses your Claude sign-in, handled by Claude Code; the mod never sees your token | Every 5 seconds while Claude works, every 30 seconds otherwise. If it fails, it waits longer each time (up to 10 minutes) and the bar says "usage unavailable" rather than showing old numbers |
 | `raw.githubusercontent.com/ImLiquify/claude-autopilot/...` | Checks for a newer version. Nothing about you is sent | Once per chat start (turn off in ⚙) |
 
 **Programs it runs:**
@@ -213,7 +231,7 @@ It also changes which model and effort your own messages run on. That is the poi
 | Program | Why | When |
 |---|---|---|
 | `node bin/lifetime.js` | Adds up your lifetime tokens from Claude Code's own files on your computer (`stats-cache.json` and chat logs). Only the total is shown; nothing is sent anywhere | After each reply |
-| `graphify update .` | Builds a code map in your project, in a `graphify-out/` folder inside it. No model calls | When a chat opens in a project with no map, and after Claude edits files (turn off in ⚙; skipped if graphify isn't installed) |
+| `graphify update .` | Builds a code map in your project, in a `graphify-out/` folder inside it. No model calls | When a chat opens in a project with no map, and after Claude edits files. Only in git projects or folders that already have a map, never in your home folder (turn off in ⚙; skipped if graphify isn't installed) |
 | `claude plugin marketplace update` / `claude plugin update` | Installs an update | Only when you press **Update** |
 
 **Files it writes,** in an `autopilot/` folder beside the installed plugin, never sent anywhere:
@@ -221,10 +239,17 @@ It also changes which model and effort your own messages run on. That is the poi
 | File | What's in it |
 |---|---|
 | `usage.json` | The latest usage reading, shared between your open chats |
-| `trace.json` | The last 40 routing decisions, with the first 60 characters of each prompt, for debugging |
+| `trace.json` | The last 40 routing decisions, with the first 60 characters of each prompt, for debugging (turn off in ⚙) |
 | `handoffs/` | The notes written at each fresh start |
 
-Your to-do list and settings are kept in Claude Code's own plugin storage. Graphify adds `graphify-out/` to each project, as described above.
+Your to-do list and settings are kept in Claude Code's own plugin storage. Graphify adds `graphify-out/` to each project, as described above. In a git project, Autopilot also adds `graphify-out/` to `.git/info/exclude`, git's private ignore list, so the map never ends up in your commits and nothing shared (like `.gitignore`) is changed.
+
+**Make Claude use the map.** The map only saves tokens if Claude reads it before opening files. Add this to your `~/.claude/CLAUDE.md` (create the file if it doesn't exist):
+
+```markdown
+## graphify
+When graphify-out/graph.json exists, run `graphify query "<question>"` before searching or reading source files, and read raw files only for the lines the graph points to.
+```
 
 **What Claude sees:** a `todo` tool, so Claude can read your list and flag finished items, and the `autopilot:builder`, `autopilot:tester` and `autopilot:reviewer` agents used by `/team`.
 

@@ -74,13 +74,16 @@ let busy = false // a turn is running: usage moves fast, so the banner reads it 
 let graphing = false // one graphify run at a time
 let edited = false // this turn changed files: the project's graph gets refreshed when it ends
 const BUSY_POLL_MS = 5_000
-let pauseUntil = 0 // the server said "too many requests": wait before reading again
+let pauseUntil = 0 // usage reads failed: wait before reading again (longer after each failure)
+let fails = 0 // usage reads failed in a row
+let noAsk = false // "Keep going" was picked: no more fresh-start offers in this chat
 
 const log = ($: $T, text: string) => $.ui.log(`autopilot: ${text}`, { to: 'debug' })
 
 // Flight recorder: the last 40 prompts and steps of every chat (how each arrived, what the router did), in
 // ~/.claude/autopilot/trace.json. shortcut: two chats writing at the same instant can drop one entry; fine for a debug log.
 const trace = ($: $T, entry: Record<string, unknown>) => void (async () => {
+  if ((await $.store.get('log')) === 'off') return // Settings: the log keeps the start of each prompt, so it can be turned off
   const file = `${$.plugin.root.replace(/[\\/]+[^\\/]+[\\/]*$/, '')}/autopilot/trace.json`
   let all: unknown[] = []
   try { all = JSON.parse(await $.fs.read(file)) } catch { /* first entry, or a half-written file */ }
@@ -92,16 +95,22 @@ const trace = ($: $T, entry: Record<string, unknown>) => void (async () => {
 // figures after every reply in between, so the banner shows the total as it moves. No tokens; the pace only spares the server.
 const pollUsage = async ($: $T) => {
   const now = await $.clock.now()
+  if (now < pauseUntil) return
   lastPoll = now
   try {
     const auth = await $.session.authorize()
     if (!auth) throw new Error('no first-party sign-in')
     const r = await $.http.fetch(USAGE_URL, { auth: auth.handle, headers: { 'anthropic-beta': 'oauth-2025-04-20' } })
-    if (r.status === 429) pauseUntil = now + 120_000
-    if (!r.ok) throw new Error(`status ${r.status}`)
+    if (!r.ok) throw Object.assign(new Error(`status ${r.status}`), { status: r.status })
     const u = L.parseUsage(r.text)
+    fails = 0
+    await update($, view, v => ({ ...v, usageDown: false }))
     await share($, { five: u.five && { ...u.five, at: now }, week: u.week && { ...u.week, at: now } }, now)
   } catch (err) {
+    // Each failure in a row waits longer; "too many requests" waits at least two minutes.
+    fails++
+    pauseUntil = now + Math.max(L.backoff(fails), (err as { status?: number }).status === 429 ? 120_000 : 0)
+    await update($, view, v => ({ ...v, usageDown: true })).catch(() => undefined)
     log($, `usage endpoint unavailable (${String((err as Error)?.message ?? err)}); using the session's figures`)
     try { await fromSession($, (await $.session.usage()).rateLimits) } catch { /* no figures yet: the banner keeps what it has */ }
   }
@@ -148,16 +157,20 @@ const share = async ($: $T, mine: { five?: L.Window; week?: L.Window } = {}, pol
 }
 
 // ---------- graphify in every project: built when missing, refreshed after edits. AST only: no model call, no tokens.
-// The global CLAUDE.md rule has Claude query graphify-out/ before reading files, so a fresh chat starts cheap.
-const NOT_A_PROJECT = /[\\/](AppData|Temp|tmp)([\\/]|$)|^[A-Za-z]:[\\/]*$|^\/$/i
+// A CLAUDE.md rule (README: "Make Claude use the map") has Claude query graphify-out/ before reading files, so a fresh chat starts cheap.
+// Only real projects: a git repository, or a folder that already has a map. Never the home folder, a drive root or a temp folder.
+const NOT_A_PROJECT = /[\\/](AppData|Temp|tmp)([\\/]|$)|^\/(tmp|var|private)([\\/]|$)|^[A-Za-z]:[\\/]*$|^\/$/i
 const graph = async ($: $T, cwd: string, why: 'built' | 'refreshed') => {
-  if (graphing || (await $.store.get('graph')) === 'off' || NOT_A_PROJECT.test(cwd) || /^[A-Za-z]:[\\/]Users[\\/][^\\/]+[\\/]?$/i.test(cwd)) return
+  const home = $.plugin.root.replace(/[\\/]+\.claude[\\/].*$/, '') // the plugin always lives under ~/.claude
+  if (graphing || (await $.store.get('graph')) === 'off' || NOT_A_PROJECT.test(cwd) || L.isHome(cwd, home)) return
+  const isRepo = await $.fs.exists(`${cwd}/.git`)
+  if (!isRepo && !(await $.fs.exists(`${cwd}/graphify-out`))) return
   graphing = true
   try {
-    // The app may start without ~/.local/bin on PATH, where graphify installs itself.
-    const home = $.plugin.root.replace(/[\\/]+\.claude[\\/].*$/, '')
+    if (isRepo) await hideFromGit($, cwd)
+    // The app may start without ~/.local/bin on PATH, where graphify installs itself (graphify.exe on Windows).
     const run = (exe: string) => $.process.run([exe, 'update', '.'], { cwd, timeoutMs: 300_000 })
-    const r = await run('graphify').catch(() => run(`${home}/.local/bin/graphify.exe`))
+    const r = await run('graphify').catch(() => run(`${home}/.local/bin/graphify`)).catch(() => run(`${home}/.local/bin/graphify.exe`))
     log($, r.exitCode === 0 ? `graphify ${why} for ${cwd}` : `graphify failed (${r.exitCode}): ${r.stderr.slice(0, 200)}`)
   } catch (err) {
     log($, `graphify not run: ${String((err as Error)?.message ?? err)}`)
@@ -166,11 +179,19 @@ const graph = async ($: $T, cwd: string, why: 'built' | 'refreshed') => {
   }
 }
 
+// The map stays out of the person's commits: graphify-out/ goes in the repository's local ignore list, which is never shared.
+// shortcut: a worktree or submodule has a .git file, not a folder, so the read fails and nothing is added; fine, graphify still runs.
+const hideFromGit = async ($: $T, cwd: string) => {
+  const file = `${cwd}/.git/info/exclude`
+  const text = await $.fs.read(file).catch(() => undefined)
+  if (text === undefined || /^\/?graphify-out\/?\s*$/m.test(text)) return
+  await $.fs.write(file, `${text}${text.endsWith('\n') || !text ? '' : '\n'}graphify-out/\n`).catch(() => undefined)
+}
+
 // ---------- Haiku check: one word (two in a long chat: NEW/SAME task), about 250 tokens.
 // Set after a turn when the chat got expensive (L.freshReason); the next idle typed message without images starts fresh.
 let pending: string | undefined
 let lastFive: number | undefined
-const FRESH_AT = 60_000 // chat tokens re-read on every message before a new task gets a fresh chat
 const SYSTEM_FRESH = `${SYSTEM}
 Then a second word: NEW if the new request is a separate task unrelated to the recent requests, else SAME. Example: "SONNET MEDIUM SAME".`
 const HANDOFF = `Write a short handoff note so a fresh chat can continue this work. Plain markdown, at most 25 lines:
@@ -207,10 +228,16 @@ const freshStart = async ($: $T, text: string, chat: number, reason?: string, mi
   const ap = `${$.plugin.root.replace(/[\\/]+[^\\/]+[\\/]*$/, '')}/autopilot`
   const date = new Date(await $.clock.now()).toLocaleString('sv-SE').slice(0, 16).replace(/[ :]/g, '-')
   await $.fs.write(`${ap}/handoffs/${date}-${topic.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)}.md`, `# ${topic}\n\n- Old chat: claude --resume ${oldId}\n- Chat size at fresh start: ~${Math.round(chat / 1000)}k tokens\n\n${body}\n`)
+  const why = reason ?? `new task in a long chat (~${Math.round(chat / 1000)}k tokens re-read per message)`
+  pending = undefined
+  // Settings "Ask me first": the note waits in a card under the bar; nothing is cleared until Start fresh.
+  if (await isOn($, 'ask', false)) {
+    await update($, view, v => ({ ...v, offer: { text, body, topic, oldId, why } }))
+    return { drop: `💬 Autopilot suggests a new chat: ${why}. Read the note in the card below, then choose Start fresh or Keep going.` }
+  }
   // A timer runs outside this prompt hook, where the engine allows /clear (it refuses it from inside the hook).
   $.clock.after(300, () => void finishFresh($, text, body, topic, oldId))
-  pending = undefined
-  return { drop: `🧹 Fresh start: ${reason ?? `new task in a long chat (~${Math.round(chat / 1000)}k tokens re-read per message)`}. Autopilot saved a note on "${topic}" and is moving your message to a fresh chat. Old chat: claude --resume ${oldId}` }
+  return { drop: `🧹 Fresh start: ${why}. Autopilot saved a note on "${topic}" and is moving your message to a fresh chat. Old chat: claude --resume ${oldId}` }
 }
 
 const finishFresh = async ($: $T, text: string, body: string, topic: string, oldId: string) => {
@@ -236,17 +263,42 @@ const setRoute = async ($: $T, route: L.Route | null) => {
   await update($, view, v => ({ ...v, maxEffort, route: route && { ...route, effort: L.capEffort(route.effort, maxEffort) } }))
 }
 
-// ---------- Settings card (⚙ beside ＋): each toggle is a $.store key shared by every chat, 'off' when turned off (missing = on).
+// ---------- Settings card (⚙ beside ＋): each option is a $.store key shared by every chat, read when it is used.
+// Switches store 'on' / 'off' (missing = its default); sizes store a number from L.CHOICES (0 = never).
 const PREFS = [
-  ['fresh', 'New chat when I start a different task'],
-  ['long', 'New chat when a chat gets very long'],
-  ['graph', 'Map each project so Claude reads fewer files'],
-  ['updates', 'Tell me when an update is out'],
+  ['ask', 'Ask me before moving to a new chat', false],
+  ['stepup', 'Try harder by itself when Claude gets stuck', true],
+  ['helpers', 'Use the cheapest model for file searches', true],
+  ['graph', 'Map each project so Claude reads fewer files', true],
+  ['log', 'Keep a log of why each model was picked', true],
+  ['updates', 'Tell me when an update is out', true],
 ] as const
+const isOn = async ($: $T, k: string, def = true) => {
+  const v = await $.store.get(k)
+  return v === undefined || v === null ? def : v !== 'off'
+}
+// The two fresh-start sizes replaced the old on/off switches: an old 'off' still means never until a size is picked.
+const LEGACY: Record<string, string> = { longAt: 'long', freshAt: 'fresh' }
+const choice = (k: 'longAt' | 'freshAt' | 'lockAt') => L.CHOICES.find(c => c.key === k)!
+const sizeOf = async ($: $T, c: L.Choice) => {
+  const stored = await $.store.get(c.key)
+  if ((stored === undefined || stored === null) && LEGACY[c.key] && (await $.store.get(LEGACY[c.key]!)) === 'off') return 0
+  return L.choiceValue(c, stored)
+}
 const loadPrefs = async ($: $T) => {
-  const isOn = async (k: string) => (await $.store.get(k)) !== 'off'
-  const prefs = { fresh: await isOn('fresh'), long: await isOn('long'), graph: await isOn('graph'), updates: await isOn('updates') }
+  const prefs: Record<string, boolean | number> = {}
+  for (const [k, , def] of PREFS) prefs[k] = await isOn($, k, def)
+  for (const c of L.CHOICES) prefs[c.key] = await sizeOf($, c)
   await update($, view, v => ({ ...v, prefs }))
+}
+const resetPrefs = async ($: $T) => {
+  for (const [k, , def] of PREFS) await $.store.set(k, def ? 'on' : 'off')
+  for (const c of L.CHOICES) await $.store.set(c.key, c.def)
+  for (const k of Object.values(LEGACY)) await $.store.set(k, 'on')
+  await $.store.set('maxEffort', 'xhigh')
+  await $.store.set('mode', 'auto')
+  await update($, view, v => ({ ...v, mode: 'auto', maxEffort: 'xhigh' }))
+  await loadPrefs($)
 }
 
 // ---------- Updates: GitHub's plugin.json against this copy's, one small request per chat start, no tokens.
@@ -278,6 +330,7 @@ const runUpdate = async ($: $T) => {
 
 // One rung up when stuck. A model switch is refused when the chat is so long that rewriting its cache costs more than the cap.
 const tryEscalate = async ($: $T, esc: L.Route, from: L.Route, lock: number | undefined) => {
+  if (!(await isOn($, 'stepup'))) return // Settings: "Try harder by itself" is off
   if (esc.family !== from.family && !L.canEscalate(lock)) {
     $.ui.toast('Stuck on Sonnet, but this chat is too long to switch models cheaply. Start a new chat with a short summary, or type !opus to switch anyway.')
     return
@@ -347,9 +400,11 @@ export const register: Register = on => {
 
   on('command.run', { command: 'fresh' }, async ($, e) => {
     const arg = e.args.trim().toLowerCase()
-    if (arg !== 'on' && arg !== 'off') return { text: `Fresh starts are ${(await $.store.get('fresh')) === 'off' ? 'off' : 'on'}. Use /fresh on or /fresh off.` }
+    const c = choice('freshAt')
+    if (arg !== 'on' && arg !== 'off') return { text: `Fresh starts are ${(await sizeOf($, c)) ? 'on' : 'off'}. Use /fresh on or /fresh off.` }
     await $.store.set('fresh', arg)
-    return { text: arg === 'on' ? `Fresh starts on: a new task in a chat that re-reads over ${FRESH_AT / 1000}k tokens moves to a fresh chat with a short note.` : 'Fresh starts off: every task stays in the current chat.' }
+    await $.store.set(c.key, arg === 'on' ? c.def : 0)
+    return { text: arg === 'on' ? `Fresh starts on: a new task in a chat that re-reads over ${c.def / 1000}k tokens moves to a fresh chat with a short note.` : 'Fresh starts off: every task stays in the current chat.' }
   })
 
   on('command.run', { command: 'team' }, async ($, e) => {
@@ -390,8 +445,9 @@ export const register: Register = on => {
       const v = await read($, view)
       const u = await $.session.usage()
       const chat = Math.max(0, (u.context.tokens ?? 0) - baseCtx)
-      // Above LOCK_AT the model stays what the last request used (or the session's own, before any); effort may still move.
-      const lock = v.mode === 'auto' && !p.force && L.isLocked(chat) ? chat : undefined
+      const [longAt, freshAt, lockAt] = [await sizeOf($, choice('longAt')), await sizeOf($, choice('freshAt')), await sizeOf($, choice('lockAt'))]
+      // Above lockAt the model stays what the last request used (or the session's own, before any); effort may still move.
+      const lock = v.mode === 'auto' && !p.force && L.isLocked(chat, lockAt) ? chat : undefined
       await update($, view, x => ({ ...x, lock, ctx: u.context.tokens }))
       // The model the chat's cache was written with: the last one used, else (a reopened chat) the session's own.
       const lockedOn = lock === undefined ? '' : v.used?.model ?? (await $.session.model().catch(() => ''))
@@ -401,16 +457,17 @@ export const register: Register = on => {
       // Never mid-task, never on a prompt with images or files attached or named (a mod's re-send does not expand them): it waits for the next one.
       // An expensive chat (pending) only sets the reason: the move still needs Haiku's NEW, so a correction like "you did not change it" stays.
       const blocked = busy || !!e.attachments?.length || L.mentionsFile(body)
-      const canFresh = !blocked && chat > FRESH_AT
-      const longOn = (await $.store.get('long')) !== 'off'
-      const runaway = !blocked && longOn && chat >= L.FRESH_TOKENS
-      if (!busy && blocked && longOn && chat >= L.FRESH_TOKENS) $.ui.toast(`This chat is ~${Math.round(chat / 1000)}k tokens and every step re-reads it. Autopilot can't move a message with files to a fresh chat: type /clear, then attach again, to save tokens.`)
+      // noAsk: "Keep going" was picked in this chat, so it is not offered again. A size of 0 is Settings "Never".
+      const canFresh = !blocked && !noAsk && freshAt > 0 && chat > freshAt
+      const tooLong = longAt > 0 && chat >= longAt
+      const runaway = !blocked && !noAsk && tooLong
+      if (!busy && blocked && tooLong) $.ui.toast(`This chat is ~${Math.round(chat / 1000)}k tokens and every step re-reads it. Autopilot can't move a message with files to a fresh chat: type /clear, then attach again, to save tokens.`)
       if (v.mode === 'off') await setRoute($, null)
       else if (v.mode !== 'auto') await setRoute($, L.routeFor(v.mode === 'opus' ? 'HARD' : 'NORMAL', `/route ${v.mode}`))
       else if (p.force) await setRoute($, L.forced(p.force, current ?? L.routeFor('NORMAL')))
       else {
         const esc = current && L.COMPLAINT.test(p.text) ? L.escalate(current, 'you said it is still not right') : null
-        const forced = runaway ? await freshStart($, p.text, chat, `this chat passed ${L.FRESH_TOKENS / 1000}k tokens (~${Math.round(chat / 1000)}k re-read per message)`, true) : undefined
+        const forced = runaway ? await freshStart($, p.text, chat, `this chat passed ${longAt / 1000}k tokens (~${Math.round(chat / 1000)}k re-read per message)`, true) : undefined
         if (forced) {
           await setRoute($, esc ?? current ?? L.routeFor('NORMAL')) // no Haiku call: the move is decided by size alone (current is already stepped up)
           trace($, { event: 'fresh', reason: forced.drop.slice(0, 120) })
@@ -424,8 +481,7 @@ export const register: Register = on => {
           }
           // Never mid-task: a message sent while a turn runs is part of that task, so no fresh start then.
           const movable = canFresh && recent.length > 0 && !L.isFollowUp(p.text)
-          const wantsFresh = movable && (await $.store.get('fresh')) !== 'off'
-          const a = await classify($, p.text, wantsFresh)
+          const a = await classify($, p.text, movable)
           if (!L.isFollowUp(p.text)) recent = [...recent, p.text].slice(-3) // "yes" is not a task
           // Haiku saw the last request too: "it's not actually this" steps up like "still broken" does.
           const esc2 = a?.retry && current ? L.escalate(current, 'you said the last result was not right') : null
@@ -464,16 +520,23 @@ export const register: Register = on => {
       const eff = effort === undefined ? undefined : String(effort)
       if (e.agentId === undefined && e.index === 0) trace($, { event: 'step', engine: `${e.model} ${String(e.effort)}`, sent: `${model} ${eff}`, mode: v.mode, lock: v.lock ?? null })
       if (e.agentId === undefined && (v.used?.model !== model || v.used?.effort !== eff)) {
-        if (v.used && v.used.model !== model) log($, `model switch ${L.modelName(v.used.model)} → ${L.modelName(model)}: re-writes ~${Math.round(Math.max(0, (v.ctx ?? 0) - baseCtx) / 1000)}k cached tokens`)
+        if (v.used && v.used.model !== model) {
+          log($, `model switch ${L.modelName(v.used.model)} → ${L.modelName(model)}: re-writes ~${Math.round(Math.max(0, (v.ctx ?? 0) - baseCtx) / 1000)}k cached tokens`)
+          // Said once ever, so a new user knows why the model changed by itself.
+          if (!(await $.store.get('switchSeen'))) {
+            await $.store.set('switchSeen', true)
+            $.ui.toast(`Autopilot switched this message from ${L.modelName(v.used.model)} to ${L.modelName(model)}. It picks the model that fits each task, to save usage. Turn it off in ⚙ Settings.`)
+          }
+        }
         await update($, view, x => ({ ...x, used: { model, effort: eff } }))
       }
     } catch { effort = L.capEffort(effort) /* routing is optional: the step goes as the engine set it */ }
     return yield* next(model === e.model && effort === e.effort ? e : { ...e, model, effort })
   })
 
-  // Search helpers run on Haiku unless a model was named.
+  // Search helpers run on Haiku unless a model was named (Settings: "Use the cheapest model for file searches").
   on('agent.spawn', async ($, e, next) =>
-    e.model !== undefined || (await read($, view)).off || !SEARCH_HELPER.test(e.subagentType) ? next(e) : next({ ...e, model: models.haiku }))
+    e.model !== undefined || (await read($, view)).off || !SEARCH_HELPER.test(e.subagentType) || !(await isOn($, 'helpers')) ? next(e) : next({ ...e, model: models.haiku }))
 
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) {
@@ -496,7 +559,7 @@ export const register: Register = on => {
     try {
       const isEdit = e.tool === 'Edit'
       const why = L.stuckReason(watch, {
-        tool: e.tool, ok: r.deny === undefined && r.isError !== true, command: e.tool === 'Bash' ? e.command : undefined,
+        tool: e.tool, ok: r.deny === undefined && r.isError !== true, command: e.tool === 'Bash' ? e.command : undefined, error: (r as { text?: string }).text,
         file: isEdit ? e.file_path : undefined, oldText: isEdit ? e.old_string : undefined, newText: isEdit ? e.new_string : undefined,
       })
       const v = await read($, view)
@@ -550,7 +613,7 @@ export const register: Register = on => {
     const v = read0.route || read0.used ? read0 : { ...read0, used: { model: await $.session.model().catch(() => '') } }
     const now = Math.max(v.now, await $.clock.now())
     const r = v.route
-    const said = `${routeLine(v)} │ ${usageText('5-hour session', v.five, now)} │ ${usageText('Week', v.week, now)}`
+    const said = `${routeLine(v)} │ ${usageText('5-hour session', v.five, now, v.usageDown)} │ ${usageText('Week', v.week, now, v.usageDown)}`
     // Graphical surfaces draw the card; the terminal keeps the one-line text.
     // Settings: one row of buttons, saved to $.store and read on every step (no model call).
     const { Button } = ui
@@ -585,12 +648,16 @@ export const register: Register = on => {
       if (!v.prefsOpen) await loadPrefs($) // another chat may have changed them
       await update($, view, x => ({ ...x, prefsOpen: !x.prefsOpen }))
     }
-    const pr = v.prefs ?? { fresh: true, long: true, graph: true, updates: true }
-    const setPref = (k: (typeof PREFS)[number][0], isOn: boolean) => async () => {
-      await $.store.set(k, isOn ? 'on' : 'off')
+    const pr = v.prefs ?? Object.fromEntries([...PREFS.map(([k, , def]) => [k, def]), ...L.CHOICES.map(c => [c.key, c.def])])
+    const setPref = (k: (typeof PREFS)[number][0], turnOn: boolean) => async () => {
+      await $.store.set(k, turnOn ? 'on' : 'off')
       await loadPrefs($)
-      if (k === 'updates' && isOn) void checkUpdate($).catch(() => undefined)
-      if (k === 'updates' && !isOn) await update($, view, x => ({ ...x, update: undefined }))
+      if (k === 'updates' && turnOn) void checkUpdate($).catch(() => undefined)
+      if (k === 'updates' && !turnOn) await update($, view, x => ({ ...x, update: undefined }))
+    }
+    const setSize = (k: string, n: number) => async () => {
+      await $.store.set(k, n)
+      await loadPrefs($)
     }
     const routing = v.mode !== 'off'
     const setRouting = async () => {
@@ -611,7 +678,45 @@ export const register: Register = on => {
           <Button key="prefs-done" label="Done" plain dimColor onPress={openPrefs} />
         </Box>
         {optRow('p-route', 'Pick the best model for each message', routing, setRouting)}
-        {PREFS.map(([k, label]) => optRow(`p-${k}`, label, pr[k], setPref(k, !pr[k])))}
+        {PREFS.map(([k, label]) => optRow(`p-${k}`, label, !!pr[k], setPref(k, !pr[k])))}
+        {/* Sizes: plain words on the buttons, the number in the line under them, and why it matters. */}
+        {L.CHOICES.map(c => {
+          const value = Number(pr[c.key] ?? c.def)
+          return (
+            <Box key={`c-${c.key}`} flexDirection="column">
+              <Box key="line" flexDirection="row" justifyContent="space-between" alignItems="center" gap={2} flexWrap="wrap">
+                <Text key="label">{c.label}</Text>
+                <Box key="opts" flexDirection="row" gap={2} alignItems="center">
+                  {c.options.map(([name, n]) => <Button key={`${c.key}-${n}`} label={n === value ? `✓ ${name}` : name} plain dimColor={n !== value} onPress={setSize(c.key, n)} />)}
+                </Box>
+              </Box>
+              <Text key="help" size="footnote" dimColor>{`${value === 0 ? 'Never.' : `At about ${L.sizeText(value)}.`} ${c.help}`}</Text>
+            </Box>
+          )
+        })}
+        <Box key="reset" flexDirection="row" justifyContent="flex-end">
+          <Button key="reset-b" label="Reset to defaults" plain dimColor onPress={() => resetPrefs($)} />
+        </Box>
+      </Box>
+    )
+    // "Ask me before moving to a new chat": the handoff note waits here; nothing is cleared until Start fresh.
+    const offer = v.offer
+    const takeOffer = (fresh: boolean) => async () => {
+      if (!offer) return
+      await update($, view, x => ({ ...x, offer: undefined }))
+      if (fresh) { $.clock.after(50, () => void finishFresh($, offer.text, offer.body, offer.topic, offer.oldId)); return }
+      noAsk = true
+      $.clock.after(50, () => void $.prompt.submit({ text: offer.text, asUser: true }))
+    }
+    const offerCard = offer && (
+      <Box key="offer" flexDirection="column" borderStyle="round" borderDimColor paddingX="md" paddingY="sm" rowGap="sm">
+        <Text key="title" bold>Start a new chat?</Text>
+        <Text key="why">{`Reason: ${offer.why}. A new chat costs less per message. It starts with this note, and your message is sent there.`}</Text>
+        <Text key="note" size="footnote" dimColor>{offer.body}</Text>
+        <Box key="buttons" flexDirection="row" gap={2} justifyContent="flex-end">
+          <Button key="keep" label="Keep going here" plain dimColor onPress={takeOffer(false)} />
+          <Button key="fresh" label="Start fresh" plain onPress={takeOffer(true)} />
+        </Box>
       </Box>
     )
     // A newer version on GitHub: one line with Update (installs it, then asks for a restart) and Later (hides it for this chat).
@@ -667,18 +772,18 @@ export const register: Register = on => {
         </Box>
       )
       // A native button's hover background is taller than its text line, so a gap keeps the card from covering it.
-      if (v.off) return <Box key="banner" flexDirection="column" gap={1}>{notice}{row}{todo}{prefsCard}</Box>
-      return <Box key="banner" flexDirection="column" gap={1}>{notice}{row}<ui.Svg source={bannerSvg(chipOf(v), meterOf('5-hour session', v.five, now), meterOf('Week', v.week, now), tokenText(v.life), v.pose)} alt={said} />{todo}{prefsCard}</Box>
+      if (v.off) return <Box key="banner" flexDirection="column" gap={1}>{notice}{row}{offerCard}{todo}{prefsCard}</Box>
+      return <Box key="banner" flexDirection="column" gap={1}>{notice}{row}<ui.Svg source={bannerSvg(chipOf(v), meterOf('5-hour session', v.five, now, v.usageDown), meterOf('Week', v.week, now, v.usageDown), tokenText(v.life), v.pose)} alt={said} />{offerCard}{todo}{prefsCard}</Box>
     }
-    if (v.off) return <Box flexDirection="column">{notice}<Box flexDirection="row">{power}</Box>{todo}{prefsCard}</Box>
+    if (v.off) return <Box flexDirection="column">{notice}<Box flexDirection="row">{power}</Box>{offerCard}{todo}{prefsCard}</Box>
     return (
       <Box flexDirection="column">{notice}{settings}
       <Box flexDirection="row" gap={1} flexWrap="wrap">
         {power}{gear}<Text bold>🤖 {routeLine(v)}</Text>
         {r?.effort === 'xhigh' && <Text color="warning">⚡ extra effort</Text>}
-        <Text dimColor>│ {usageText('5-hour session', v.five, now)} │ {usageText('Week', v.week, now)}</Text>
+        <Text dimColor>│ {usageText('5-hour session', v.five, now, v.usageDown)} │ {usageText('Week', v.week, now, v.usageDown)}</Text>
       </Box>
-      {todo}{prefsCard}
+      {offerCard}{todo}{prefsCard}
       </Box>
     )
   })

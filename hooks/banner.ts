@@ -87,7 +87,11 @@ export const routeLine = (v: ApView) =>
   : v.route ? `${L.modelName(v.route.family)} · ${v.route.effort} · ${v.route.reason}`
   : v.used ? `${L.modelName(v.used.model)} · ${v.used.effort ?? ''}` : 'Waiting for your first message'
 
-export const usageText = (label: string, w: L.Window | undefined, now: number) => {
+// down: the usage reads keep failing. A reading over 10 minutes old is then not shown as if it were current.
+const unavailable = (w: L.Window | undefined, now: number, down?: boolean) => !!down && (!w?.at || now - w.at > 600_000)
+
+export const usageText = (label: string, w: L.Window | undefined, now: number, down?: boolean) => {
+  if (unavailable(w, now, down)) return `${label} usage unavailable`
   const c = L.current(w, now)
   if (!c) return `${label} …`
   return `${label} ${L.bar(c.pct, 8)} ${Math.round(c.pct)}%${L.ago(c.at, now)}${c.resetsAt ? ` · resets in ${L.resetsIn(c.resetsAt, now)}` : ' · reset'}`
@@ -103,7 +107,8 @@ export const chipOf = (v: ApView): Chip => {
   return v.used ? { title, sub: 'your model', locked: false, extra: false } : { title: 'Autopilot', sub: 'waiting for your first message', locked: false, extra: false }
 }
 
-export const meterOf = (label: string, w: L.Window | undefined, now: number): Meter => {
+export const meterOf = (label: string, w: L.Window | undefined, now: number, down?: boolean): Meter => {
+  if (unavailable(w, now, down)) return { label, sub: 'usage unavailable' }
   const c = L.current(w, now)
   return { label, pct: c?.pct, sub: !c ? 'loading…' : `${c.resetsAt ? `resets in ${L.resetsIn(c.resetsAt, now)}` : 'reset'}${L.ago(c.at, now)}` }
 }

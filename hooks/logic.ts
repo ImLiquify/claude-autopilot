@@ -78,10 +78,17 @@ export const parseRoute = (answer: string): Route | undefined => {
   return { family, effort, tier, reason: TABLE[tier][2] }
 }
 
-// Too short to be a new task ("yes", "go on"): keep the current route, no Haiku call.
-export const isFollowUp = (text: string) => text.trim().length < 20
-// The prompt names a file the app attached as text ("[Image: source: C:\…png]", "@notes.md", a pasted path): a mod's re-send would lose it.
-export const mentionsFile = (text: string) => /\[(Image|File)\b|@\S+\.\w{1,5}\b|\b[A-Za-z]:[\\/]\S+\.\w{1,5}\b/i.test(text)
+// A reply that only carries the last task on ("yes", "ok do it", "go on"): not a new task.
+// Words, not length, so a short request like "fix the auth bug" still counts as a task.
+const GO_ON = new Set('yes yeah yep yup y ok okay k sure go on ahead do it continue carry proceed next thanks thank you ty great nice perfect cool sounds looks good lgtm please pls and that fine alright right'.split(' '))
+export const isFollowUp = (text: string) => {
+  const words = text.toLowerCase().replace(/'/g, '').replace(/[^a-z]+/g, ' ').trim().split(' ').filter(Boolean)
+  return words.every(w => GO_ON.has(w))
+}
+// The prompt names a file the app attached as text ("[Image: source: C:\…png]", "@notes.md", a pasted Windows, macOS or Linux path):
+// a mod's re-send would lose it. An email ("name@mail.com") is not an @file: the @ must start a word.
+export const mentionsFile = (text: string) =>
+  /\[(Image|File)\b|(^|[\s(`'"])@[\w./\\-]+\.\w{1,5}\b|\b[A-Za-z]:[\\/]\S+\.\w{1,5}\b|(^|[\s(`'"])~?\/[\w.-]+\/\S*\.\w{1,5}\b/i.test(text)
 
 export const COMPLAINT = /\b(still (broken|failing|not working|wrong|the same)|(does ?n[o']?t|did ?n[o']?t|is ?n[o']?t) (work|fix)|not fixed|that'?s wrong|same (error|problem|issue)|wrong again)\b/i
 
@@ -103,16 +110,16 @@ export const escalate = (route: Route, reason: string): Route | null => {
 export const LOCK_AT = 30_000
 export const ESCALATE_MAX_USD = 0.4
 const WRITE_PER_M = { opus: 5, sonnet: 2.5, haiku: 0.125 } // $ per million cache-write tokens
-export const isLocked = (chatTokens: number) => chatTokens > LOCK_AT
+export const isLocked = (chatTokens: number, at = LOCK_AT) => chatTokens > at
 export const rewriteUsd = (tokens: number, model = 'opus') =>
   (tokens * WRITE_PER_M[/haiku/i.test(model) ? 'haiku' : /sonnet/i.test(model) ? 'sonnet' : 'opus']) / 1e6
 export const canEscalate = (lock: number | undefined) => lock === undefined || rewriteUsd(lock) <= ESCALATE_MAX_USD
 export const modelName = (id?: string) => (!id ? '?' : /opus/i.test(id) ? 'Opus' : /sonnet/i.test(id) ? 'Sonnet' : /haiku/i.test(id) ? 'Haiku' : id)
 
 // --- Stuck signals within one turn: the same command failing twice, or re-editing the same spot.
-export type Watch = { fails: Record<string, number>; lastNew: Record<string, string>; spots: Record<string, number> }
-export const freshWatch = (): Watch => ({ fails: {}, lastNew: {}, spots: {} })
-export type ToolSeen = { tool: string; ok: boolean; command?: string; file?: string; oldText?: string; newText?: string }
+export type Watch = { fails: Record<string, number>; errors: Record<string, number>; lastNew: Record<string, string>; spots: Record<string, number> }
+export const freshWatch = (): Watch => ({ fails: {}, errors: {}, lastNew: {}, spots: {} })
+export type ToolSeen = { tool: string; ok: boolean; command?: string; error?: string; file?: string; oldText?: string; newText?: string }
 
 const lineOverlap = (a: string, b: string) => a.split('\n').some(l => l.trim().length > 10 && b.includes(l.trim()))
 
@@ -121,6 +128,12 @@ export const stuckReason = (w: Watch, t: ToolSeen): string | undefined => {
     const key = t.command.trim()
     w.fails[key] = (w.fails[key] ?? 0) + 1
     if (w.fails[key] === 2) return 'the same command failed twice'
+  }
+  // The same error from any tool (a test re-run another way, the same build error): works in any language, no complaint needed.
+  const err = t.ok ? undefined : t.error?.split('\n').map(l => l.trim()).find(l => l.length > 10)?.slice(0, 200)
+  if (err) {
+    w.errors[err] = (w.errors[err] ?? 0) + 1
+    if (w.errors[err] === 2) return 'the same error came back twice'
   }
   if (t.tool === 'Edit' && t.ok && t.file && t.oldText !== undefined) {
     const prev = w.lastNew[t.file]
@@ -222,3 +235,29 @@ export const newer = (a: string, b: string) => {
   for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0)
   return false
 }
+
+// Usage reads that keep failing wait longer each time: 10 s, 20 s, 40 s … up to 10 minutes.
+export const backoff = (fails: number) => Math.min(600_000, 10_000 * 2 ** Math.max(0, fails - 1))
+
+// The home folder itself is never a project (graphify would map everything in it), on any system.
+export const isHome = (cwd: string, home: string) => {
+  const n = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+  return !!home && n(cwd) === n(home)
+}
+
+// ---------- Settings: each choice in plain words, with the number behind it. 0 = never.
+export type Choice = { key: string; label: string; help: string; options: readonly (readonly [string, number])[]; def: number }
+export const CHOICES: readonly Choice[] = [
+  { key: 'longAt', label: 'Start a new chat when this one gets long', def: 150_000,
+    help: 'Claude re-reads the whole chat for every message, so a long chat costs more each time. The new chat gets a short note of what was done.',
+    options: [['Sooner', 100_000], ['Normal', 150_000], ['Later', 250_000], ['Never', 0]] },
+  { key: 'freshAt', label: 'Start a new chat when I switch to a different task', def: 60_000,
+    help: 'Only for a new, unrelated task, and only once the chat is bigger than this.',
+    options: [['Sooner', 40_000], ['Normal', 60_000], ['Later', 100_000], ['Never', 0]] },
+  { key: 'lockAt', label: 'Stop switching models once a chat is', def: 30_000,
+    help: 'Switching models in a long chat makes Claude re-read all of it, which costs about as much as 30 normal messages. Effort can still change.',
+    options: [['Short', 15_000], ['Medium', 30_000], ['Long', 60_000]] },
+]
+// A stored value only counts when it is one of the options; anything else is the default.
+export const choiceValue = (c: Choice, stored: unknown) => (c.options.some(([, n]) => n === stored) ? (stored as number) : c.def)
+export const sizeText = (n: number) => (n === 0 ? 'never' : `${Math.round(n / 1000)}k tokens`)

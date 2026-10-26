@@ -144,3 +144,37 @@ test('auto routing runs one step above the Haiku pick, Haiku stays, the top stay
   expect(L.stepUp(L.parseRoute('SONNET XHIGH')!)).toMatchObject({ family: 'opus', effort: 'xhigh' })
   expect(L.stepUp(L.parseRoute('OPUS XHIGH')!)).toMatchObject({ family: 'opus', effort: 'xhigh' })
 })
+
+test('follow-ups are carry-on words, not short messages', () => {
+  for (const t of ['yes', 'ok do it', 'Go on!', 'yes please', 'thanks', 'sounds good', 'continue']) expect(L.isFollowUp(t)).toBe(true)
+  for (const t of ['fix the auth bug', 'add dark mode', 'yes but make it red']) expect(L.isFollowUp(t)).toBe(false)
+})
+
+test('file mentions: Windows, macOS and Linux paths and @files; an email is not a file', () => {
+  for (const t of ['see C:\\app\\main.ts', 'open /Users/me/app/main.ts', 'look at ~/code/x/main.py', 'check @notes.md', '[Image: source: x.png]']) expect(L.mentionsFile(t)).toBe(true)
+  for (const t of ['mail name@mail.com about it', 'make it 1/2 the size', 'add dark mode']) expect(L.mentionsFile(t)).toBe(false)
+})
+
+test('home folder is detected on every system', () => {
+  expect(L.isHome('C:\\Users\\Kaiser\\', 'C:/Users/Kaiser')).toBe(true)
+  expect(L.isHome('/Users/me', '/Users/me')).toBe(true)
+  expect(L.isHome('/home/me/project', '/home/me')).toBe(false)
+})
+
+test('stuck: the same error twice counts, even from a different command', () => {
+  const w = L.freshWatch()
+  expect(L.stuckReason(w, { tool: 'Bash', ok: false, command: 'npm test', error: 'FAIL src/date.test.ts\nExpected 29' })).toBeUndefined()
+  expect(L.stuckReason(w, { tool: 'Bash', ok: false, command: 'npx jest date', error: 'FAIL src/date.test.ts\nExpected 29' })).toBe('the same error came back twice')
+})
+
+test('usage backoff doubles and stops at 10 minutes', () => {
+  expect([1, 2, 3, 20].map(L.backoff)).toEqual([10_000, 20_000, 40_000, 600_000])
+})
+
+test('settings sizes: only a listed option counts, anything else is the default', () => {
+  const long = L.CHOICES.find(c => c.key === 'longAt')!
+  expect(L.choiceValue(long, 0)).toBe(0)
+  expect(L.choiceValue(long, 250_000)).toBe(250_000)
+  expect(L.choiceValue(long, 'junk')).toBe(150_000)
+  expect(L.choiceValue(long, undefined)).toBe(150_000)
+})
