@@ -15,6 +15,7 @@ export type ApView = {
   note?: string
   pose?: 'idle' | 'think' | 'work' // the mascot: blinking, thinking, walking
   todoOpen?: boolean // the to-do card under the bar is expanded
+  mini?: boolean // minimized: only the crab and the session ring show
   off?: boolean // the on/off switch: off, Autopilot leaves prompts, models and effort to the engine
   prefsOpen?: boolean // the settings card (⚙ beside ＋) is expanded
   prefs?: Record<string, boolean | number> // settings: switches (true = on) and sizes in tokens (0 = never)

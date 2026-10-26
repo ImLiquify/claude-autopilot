@@ -6,7 +6,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue" alt="License: MIT"/></a>
   <img src="https://img.shields.io/badge/Claude%20Code-plugin-d97757" alt="Claude Code plugin"/>
   <img src="https://img.shields.io/badge/version-0.14.0-informational" alt="Version 0.14.0"/>
-  <img src="https://img.shields.io/badge/tests-63%20passing-brightgreen" alt="63 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-65%20passing-brightgreen" alt="65 tests passing"/>
 </p>
 
 <p align="center">
@@ -156,7 +156,7 @@ The ⚙ to the right of ＋ on the to-do card opens a **Settings** card. Everyth
 
 ### 7. Update notices
 
-When a chat starts, Autopilot compares its version with the one on GitHub. If GitHub has a newer one, a small notice appears above the bar: **Autopilot 0.15.0 is out**, with **Update** and **Later**. Update runs `claude plugin marketplace update autopilot` and `claude plugin update autopilot@autopilot`; restart Claude Code afterwards to use the new version. If that fails, the notice tells you the command to run yourself. Later hides it for that chat. Nothing updates without your click.
+When a chat starts, Autopilot compares its version with the one on GitHub. If GitHub has a newer one, a small notice appears above the bar: **Autopilot 0.16.0 is out**, with **Update** and **Later**. Update runs `claude plugin marketplace update autopilot` and `claude plugin update autopilot@autopilot`; restart Claude Code afterwards to use the new version. If that fails, the notice tells you the command to run yourself. Later hides it for that chat. Nothing updates without your click.
 
 ### Extras
 

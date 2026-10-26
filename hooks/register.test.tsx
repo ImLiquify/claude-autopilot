@@ -480,3 +480,19 @@ test('past 150k even "yes" moves, with no Haiku call', async ($, on) => {
   expect(w.classified).toBe(before)
   expect(w.handoffModel).toBe('claude-sonnet-5-5')
 })
+
+test('minimize: Minimize leaves the crab and ring with an Expand button, remembered; Expand brings the full card back', async ($, on) => {
+  const store: Record<string, unknown> = {}
+  const w = await boot($, on, { store })
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', ...BAND })
+  await w.clock!.advance(10)
+  expect(await ui.find({ type: 'Button', key: 'expand' } as never)).toBeUndefined()
+  await ui.press({ key: 'mini' } as never)
+  expect(await ui.find({ type: 'Button', key: 'expand' } as never)).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'power' } as never)).toBeUndefined()
+  expect(store.mini).toBe(true)
+  await ui.press({ key: 'expand' } as never)
+  expect(await ui.find({ type: 'Button', key: 'power' } as never)).toBeDefined()
+  expect(store.mini).toBe(false)
+  await ui.unmount()
+})

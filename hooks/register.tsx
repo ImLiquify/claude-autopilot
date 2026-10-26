@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { ApTodo, ApView } from '../types'
-import { bannerSvg, chipOf, meterOf, routeLine, tokenText, usageText } from './banner'
+import { bannerSvg, chipOf, meterOf, MINI_DIVIDER, miniCrab, miniMeter, miniTokens, routeLine, tokenText, usageText } from './banner'
 import * as L from './logic'
 
 type $T = EngineInterface
@@ -348,7 +348,8 @@ export const register: Register = on => {
       const mode = ((await $.store.get('mode')) ?? 'auto') as ApView['mode']
       const maxEffort = ((await $.store.get('maxEffort')) ?? undefined) as string | undefined
       const off = (await $.store.get('off')) === true
-      await update($, view, v => ({ ...v, mode, maxEffort, off }))
+      const mini = (await $.store.get('mini')) === true
+      await update($, view, v => ({ ...v, mode, maxEffort, off, mini }))
       void loadPrefs($).catch(() => undefined)
       void checkUpdate($).catch(err => log($, `update check skipped: ${String(err)}`))
       await $.command.register({ name: 'route', description: 'Autopilot model routing', argumentHint: 'auto|opus|sonnet|off' })
@@ -764,11 +765,33 @@ export const register: Register = on => {
       const name = (m: string) => (m === 'xhigh' ? 'Extra high' : m[0]!.toUpperCase() + m.slice(1))
       const efforts = v.settings ? L.EFFORTS.map(m => <Button key={m} label={m === max ? `✓ ${name(m)}` : name(m)} plain dimColor={m !== max} onPress={setMax(m)} />) : []
       const gear = <Button key="gear" label={v.settings ? 'Done' : `Max effort: ${name(max)}`} plain onPress={flip(!v.settings)} />
+      // Minimize: only the crab and the session ring remain (plus notices and offers, which need an answer). Remembered across restarts.
+      const setMini = (mini: boolean) => async () => {
+        await $.store.set('mini', mini)
+        await update($, view, x => ({ ...x, mini, settings: false, prefsOpen: false }))
+      }
+      if (v.mini && !v.off) {
+        return (
+          <Box key="banner" flexDirection="column" gap={1}>{notice}{offerCard}
+            <Box key="mini" flexDirection="row" alignItems="center" justifyContent="space-between" gap={1}>
+              {/* Every piece has its own alt: the desktop drops an Svg whose alt is empty. */}
+              <ui.Svg key="crab" source={miniCrab(chipOf(v).title, v.pose)} alt={routeLine(v)} />
+              <ui.Svg key="d1" source={MINI_DIVIDER} alt="│" />
+              <ui.Svg key="five" source={miniMeter(meterOf('5-hour', v.five, now, v.usageDown))} alt={usageText('5-hour session', v.five, now, v.usageDown)} />
+              <ui.Svg key="d2" source={MINI_DIVIDER} alt="│" />
+              <ui.Svg key="week" source={miniMeter(meterOf('Week', v.week, now, v.usageDown))} alt={usageText('Week', v.week, now, v.usageDown)} />
+              <ui.Svg key="d3" source={MINI_DIVIDER} alt="│" />
+              <ui.Svg key="life" source={miniTokens(tokenText(v.life))} alt={tokenText(v.life)} />
+              <Button key="expand" label="▴" plain dimColor onPress={setMini(false)} />
+            </Box>
+          </Box>
+        )
+      }
       // The switch on the left, above the crab; settings on the right (laid out like the to-do card's header).
       const row = v.off ? <Box key="row" flexDirection="row">{power}</Box> : (
         <Box key="row" flexDirection="row" justifyContent="space-between" alignItems="center">
           {power}
-          <Box key="right" flexDirection="row" gap={2} alignItems="center">{[...efforts, gear]}</Box>
+          <Box key="right" flexDirection="row" gap={2} alignItems="center">{[...efforts, gear, <Button key="mini" label="▾ Minimize" plain dimColor onPress={setMini(true)} />]}</Box>
         </Box>
       )
       // A native button's hover background is taller than its text line, so a gap keeps the card from covering it.
