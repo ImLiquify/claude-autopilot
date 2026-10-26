@@ -5,8 +5,8 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue" alt="License: MIT"/></a>
   <img src="https://img.shields.io/badge/Claude%20Code-plugin-d97757" alt="Claude Code plugin"/>
-  <img src="https://img.shields.io/badge/version-0.14.0-informational" alt="Version 0.14.0"/>
-  <img src="https://img.shields.io/badge/tests-65%20passing-brightgreen" alt="65 tests passing"/>
+  <img src="https://img.shields.io/badge/version-0.16.1-informational" alt="Version 0.16.1"/>
+  <img src="https://img.shields.io/badge/tests-66%20passing-brightgreen" alt="66 tests passing"/>
 </p>
 
 <p align="center">
@@ -20,7 +20,7 @@ Most Claude Code sessions run every message on the same big model at the same ef
 
 Autopilot fixes that automatically. Install it once and keep working the way you do now.
 
-- **Right effort, every message.** A tiny Haiku check (about 250 tokens) rates each request. Every message runs on **Opus**, at low effort for quick jobs and up to high or xhigh for hard ones.
+- **Right effort, every message.** A tiny Haiku check (about 250 tokens) rates each request. Simple chores run on **Haiku**, routine work on **Sonnet** and hard problems on **Opus**, each at the effort it needs, always one step above what Haiku judged just good enough.
 - **Cheap search helpers.** Explore and search subagents run on Haiku: they only find and list, and the main chat does the thinking. Other helpers keep their own model.
 - **Cache-friendly by design.** In long chats the model is locked so the prompt cache is never thrown away.
 - **Always know where you stand.** Your 5-hour and weekly limits, with reset times, live above the prompt.
@@ -125,6 +125,8 @@ The **Autopilot: On** switch on the left of that row turns the whole mod off and
 <p align="center">
   <img src="docs/banner-off.svg" width="730" alt="The bar switched off: only Autopilot: Off remains"/>
 </p>
+
+**Minimize.** Click **▾ Minimize** (top right of the bar) to shrink the card to a single strip: the crab with the model and effort, the 5-hour and Week meters, and your lifetime tokens. The switch, Max effort, to-do list and settings are hidden until you click **▴** to expand again. Update notices and the "Start a new chat?" card still appear. Your choice is remembered across restarts, but is read when a chat starts, so chats already open need a restart to pick it up. The button is hidden while Autopilot is off.
 
 <p align="center">
   <img src="docs/banner-heavy.svg" width="730" alt="The bar on a heavy task, Max effort opened: Low, Medium, High, a ticked Extra high and Done above a card showing Opus · xhigh with the Extra effort tag"/>
