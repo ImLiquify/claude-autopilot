@@ -1,0 +1,36 @@
+# When a push to main carries a new version in plugin.json, this makes its GitHub release: tag vX.Y.Z, the version's
+# CHANGELOG.md section as the notes, and three installers pinned to that version (Windows, Mac/Linux, and one for Claude).
+name: Release
+on:
+  push:
+    branches: [main]
+    paths: ['.claude-plugin/plugin.json']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release this version if it has no release yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=$(jq -r .version .claude-plugin/plugin.json)
+          if gh release view "v$v" >/dev/null 2>&1; then echo "v$v is already released"; exit 0; fi
+          awk -v v="$v" '/^## /{p = ($2 == v); next} p' CHANGELOG.md > notes.md
+          {
+            echo
+            echo "### Install this version"
+            echo "- Windows: download \`Install-Autopilot-$v.cmd\` and double-click it."
+            echo "- Mac or Linux: download \`install-autopilot-$v.sh\` and run \`bash install-autopilot-$v.sh\`."
+            echo "- Any system: drop \`Install-Autopilot-$v.md\` into a Claude Code chat and say \"install this\"."
+            echo
+            echo "Restart Claude afterwards. Running an older version's installer takes you back to that version."
+          } >> notes.md
+          mkdir dist
+          sed "s/AP_VERSION=latest/AP_VERSION=$v/" install/Install-Autopilot.cmd > "dist/Install-Autopilot-$v.cmd"
+          sed "s/AP_VERSION=latest/AP_VERSION=$v/" install/install.sh > "dist/install-autopilot-$v.sh"
+          sed "s/AP_VERSION=latest/AP_VERSION=$v/" install/INSTALL-WITH-CLAUDE.md > "dist/Install-Autopilot-$v.md"
+          gh release create "v$v" dist/* --title "Autopilot $v" --notes-file notes.md --target "$GITHUB_SHA" --latest

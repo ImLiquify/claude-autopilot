@@ -2,6 +2,24 @@ import { expect, test } from 'claude-code/testing'
 
 import * as L from './logic'
 
+test('changelog: bullets of every newer version, newest first, capped', async () => {
+  const md = '# Changelog\n\n## 0.21.0 (2026-11-10)\n- A\n- B\n\n## v0.20.0\n* C\n\n## 0.19.0\n- D\n'
+  expect(L.changesSince(md, '0.19.0')).toEqual(['A', 'B', 'C'])
+  expect(L.changesSince(md, '0.21.0')).toEqual([])
+  expect(L.changesSince(md, '0.0.1', 3)).toEqual(['A', 'B', '…and 2 more on GitHub'])
+})
+
+test('pinning: the autopilot source gets or loses a release tag, whatever form it was in', async () => {
+  const git = '{\n  "x": { "autopilot@autopilot": true },\n  "extraKnownMarketplaces": {\n    "autopilot": {\n      "source": {\n        "source": "git",\n        "url": "https://github.com/ImLiquify/claude-autopilot.git"\n      }\n    }\n  }\n}'
+  expect(L.pinnedTag(git)).toBeUndefined()
+  const pinned = L.pinSource(git, 'v0.19.0')
+  expect(JSON.parse(pinned).extraKnownMarketplaces.autopilot.source).toEqual({ source: 'github', repo: 'ImLiquify/claude-autopilot', ref: 'v0.19.0' })
+  expect(JSON.parse(pinned).x).toEqual({ 'autopilot@autopilot': true })
+  expect(L.pinnedTag(pinned)).toBe('v0.19.0')
+  expect(L.pinnedTag(L.pinSource(pinned))).toBeUndefined()
+  expect(L.pinSource('{}', 'v1')).toBe('{}')
+})
+
 test('routing table: each tier gets its model and effort', async () => {
   expect(L.routeFor('TRIVIAL')).toMatchObject({ family: 'sonnet', effort: 'low' })
   expect(L.routeFor('NORMAL')).toMatchObject({ family: 'sonnet', effort: 'medium' })
@@ -11,9 +29,9 @@ test('routing table: each tier gets its model and effort', async () => {
   expect(L.parseTier('?')).toBeUndefined()
 })
 
-test('Haiku names model and effort: every effort works on both models', async () => {
-  for (const f of ['sonnet', 'opus'] as const)
-    for (const e of L.EFFORTS) expect(L.parseRoute(`${f.toUpperCase()} ${e.toUpperCase()}`)).toMatchObject({ family: f, effort: e })
+test('the check names model and effort: every effort works on Opus, and Sonnet up to medium (above that is hard work: Opus)', async () => {
+  for (const e of L.EFFORTS) expect(L.parseRoute(`OPUS ${e.toUpperCase()}`)).toMatchObject({ family: 'opus', effort: e })
+  for (const e of ['low', 'medium'] as const) expect(L.parseRoute(`SONNET ${e.toUpperCase()}`)).toMatchObject({ family: 'sonnet', effort: e })
   expect(L.parseRoute('HARD')).toMatchObject({ family: 'opus', effort: 'high' })
   expect(L.parseRoute('?')).toBeUndefined()
 })
@@ -29,7 +47,7 @@ test('max is always capped to xhigh; other efforts pass', async () => {
 
 test('escalation steps up one rung: effort first, then Sonnet to Opus, never past Opus high', async () => {
   const r = (family: 'sonnet' | 'opus', effort: L.Effort) => ({ ...L.routeFor('NORMAL'), family, effort })
-  expect(L.escalate(r('sonnet', 'low'), 'x')).toMatchObject({ family: 'sonnet', effort: 'medium' })
+  expect(L.escalate(r('sonnet', 'low'), 'x')).toMatchObject({ family: 'sonnet', effort: 'high' }) // straight to high, no wrong answer in between
   expect(L.escalate(r('opus', 'medium'), 'x')).toMatchObject({ family: 'opus', effort: 'high' })
   expect(L.escalate(r('sonnet', 'high'), 'x')).toMatchObject({ family: 'opus', effort: 'high' })
   expect(L.escalate(r('opus', 'high'), 'x')).toBeNull()
@@ -41,13 +59,6 @@ test('model lock: above 30k chat tokens; escalation only under the cost cap', as
   expect(L.canEscalate(undefined)).toBe(true)
   expect(L.canEscalate(40_000)).toBe(true)
   expect(L.canEscalate(285_000)).toBe(false)
-})
-
-test('fresh-start trigger: size first, then the cost of one turn, with the window share as upper bound', async () => {
-  expect(L.freshReason({ ctx: 160_000, window: 1_000_000 })).toBe('chat was 160k')
-  expect(L.freshReason({ ctx: 149_000, window: 1_000_000 })).toBeUndefined()
-  expect(L.freshReason({ ctx: 90_000, window: 1_000_000, turnPct: 2 })).toBe('one message used 2.0% of your 5-hour limit')
-  expect(L.freshReason({ ctx: 90_000, window: 200_000 })).toBe('chat was 45% of the window')
 })
 
 test('stuck signals: a command failing twice, re-editing the same spot twice', async () => {
@@ -113,9 +124,9 @@ test('todo: add, tick, untick, list and clear', () => {
   expect(L.todoCmd(r.list, 'clear').list).toEqual([{ text: 'ship the banner', done: false }])
 })
 
-test('Haiku: picked for the simplest jobs, always at low, and stuck steps it up to Sonnet medium', () => {
-  expect(L.parseRoute('HAIKU LOW')).toMatchObject({ family: 'haiku', effort: 'low' })
-  expect(L.escalate(L.parseRoute('HAIKU LOW')!, 'stuck')).toMatchObject({ family: 'sonnet', effort: 'medium' })
+test('Haiku only routes: a stray HAIKU answer runs on Sonnet low, and a route left on Haiku steps up to Sonnet', () => {
+  expect(L.parseRoute('HAIKU LOW')).toMatchObject({ family: 'sonnet', effort: 'low' })
+  expect(L.escalate({ family: 'haiku', effort: 'low', tier: 'TRIVIAL', reason: 'x' }, 'stuck')).toMatchObject({ family: 'sonnet', effort: 'medium' })
 })
 
 test('Claude can flag an open to-do for review; ticking it settles the flag', () => {
@@ -137,12 +148,11 @@ test('newer: compares versions by number, never as text', () => {
   expect(L.newer('oops', '0.13.3')).toBe(false)
 })
 
-test('auto routing runs one step above the Haiku pick, Haiku stays, the top stays', () => {
-  expect(L.stepUp(L.parseRoute('HAIKU LOW')!)).toMatchObject({ family: 'haiku', effort: 'low' })
-  expect(L.stepUp(L.parseRoute('SONNET LOW')!)).toMatchObject({ family: 'sonnet', effort: 'medium', tier: 'NORMAL' })
-  expect(L.stepUp(L.parseRoute('OPUS HIGH')!)).toMatchObject({ family: 'opus', effort: 'xhigh' })
-  expect(L.stepUp(L.parseRoute('SONNET XHIGH')!)).toMatchObject({ family: 'opus', effort: 'xhigh' })
-  expect(L.stepUp(L.parseRoute('OPUS XHIGH')!)).toMatchObject({ family: 'opus', effort: 'xhigh' })
+test('auto routing runs exactly the Haiku pick; a switch is priced at the model it goes to', () => {
+  expect(L.parseRoute('OPUS MEDIUM')).toMatchObject({ family: 'opus', effort: 'medium' })
+  expect(L.parseRoute('SONNET LOW')).toMatchObject({ family: 'sonnet', effort: 'low' })
+  expect(L.canEscalate(120_000, 'claude-sonnet-5-5')).toBe(true) // $0.30
+  expect(L.canEscalate(120_000, 'claude-opus-5-5')).toBe(false) // $0.60
 })
 
 test('follow-ups are carry-on words, not short messages', () => {
@@ -174,7 +184,79 @@ test('usage backoff doubles and stops at 10 minutes', () => {
 test('settings sizes: only a listed option counts, anything else is the default', () => {
   const long = L.CHOICES.find(c => c.key === 'longAt')!
   expect(L.choiceValue(long, 0)).toBe(0)
-  expect(L.choiceValue(long, 250_000)).toBe(250_000)
-  expect(L.choiceValue(long, 'junk')).toBe(150_000)
-  expect(L.choiceValue(long, undefined)).toBe(150_000)
+  expect(L.choiceValue(long, 150_000)).toBe(150_000)
+  expect(L.choiceValue(long, 'junk')).toBe(100_000)
+  expect(L.choiceValue(long, undefined)).toBe(100_000)
+})
+
+test('low effort only when it is the person\'s own setting; a "Sonnet high" answer is hard work, so it goes to Opus', () => {
+  expect([L.floorEffort('low', 'medium'), L.floorEffort('low', 'low'), L.floorEffort('high', 'medium'), L.floorEffort('low', undefined)]).toEqual(['medium', 'low', 'high', 'medium'])
+  expect(L.parseRoute('SONNET HIGH')).toMatchObject({ family: 'opus', effort: 'high' })
+  expect(L.parseRoute('SONNET MEDIUM')).toMatchObject({ family: 'sonnet', effort: 'medium' })
+})
+
+test('limit warning: once at 80%, again at 95%, never twice for one window, and fresh in the next window', () => {
+  const w = (pct: number, resetsAt = '2026-10-19T04:30:00Z') => ({ pct, resetsAt })
+  expect(L.limitWarning(w(79), undefined)).toBeUndefined()
+  expect(L.limitWarning({ pct: 90 }, undefined)).toBeUndefined() // no reset time: not a real reading
+  const at80 = L.limitWarning(w(82), undefined)!
+  expect(at80.level).toBe(80)
+  expect(L.limitWarning(w(85, '2026-10-19T04:30:04Z'), at80.key)).toBeUndefined() // the same window, read seconds apart
+  const at95 = L.limitWarning(w(96), at80.key)!
+  expect(at95.level).toBe(95)
+  expect(L.limitWarning(w(97), at95.key)).toBeUndefined()
+  expect(L.limitWarning(w(81, '2026-10-19T09:30:00Z'), at95.key)?.level).toBe(80)
+})
+
+test('/why lists this chat\'s picks in plain words, and says so when there are none', () => {
+  const rows: L.TraceRow[] = [
+    { event: 'prompt', chat: 'other', routed: true, text: 'not mine' }, { event: 'routed', chat: 'other', route: null },
+    { event: 'prompt', chat: 'abc', routed: true, text: 'fix the  typo' }, { event: 'routed', chat: 'abc', route: { family: 'sonnet', effort: 'medium', reason: 'quick task' } },
+    { event: 'shorten', chat: 'abc', reason: '🗜️ Shortening this chat: new task' },
+    { event: 'prompt', chat: 'abc', routed: true, text: 'plan it' }, { event: 'routed', chat: 'abc', route: null },
+  ]
+  expect(L.whyText(rows, 'abc')).toBe('"fix the typo" → Sonnet · medium (quick task)\nShortened the chat: Shortening this chat: new task\n"plan it" → your own model and effort')
+  expect(L.whyText(rows, 'zzz')).toContain('No model picks')
+})
+
+test('a chat cools after an hour, and only a known last turn counts', () => {
+  expect(L.isCold(0, L.COLD_AFTER_MS + 1)).toBe(true)
+  expect(L.isCold(0, L.COLD_AFTER_MS / 2)).toBe(false)
+  expect(L.isCold(undefined, L.COLD_AFTER_MS * 5)).toBe(false)
+})
+
+test('Keep going holds for 50k more of chat, and ends early if the chat shrank', async () => {
+  expect(L.keepGoingHolds(160_000, undefined)).toBe(false)
+  expect(L.keepGoingHolds(160_000, 150_000)).toBe(true)
+  expect(L.keepGoingHolds(200_000, 150_000)).toBe(false)
+  expect(L.keepGoingHolds(60_000, 150_000)).toBe(false)
+})
+
+test('hand-off: the check word, when a helper is worth it, the cost comparison and the pause', async () => {
+  expect(L.parseHand('OPUS HIGH WORKER')).toBe('worker')
+  expect(L.parseHand('opus medium expert SAME')).toBe('expert')
+  expect(L.parseHand('OPUS MEDIUM SOLO')).toBe(undefined)
+  expect(L.parseHand('OPUS MEDIUM')).toBe(undefined)
+  // A cheaper helper is worth it from an Opus chat of any size; a same-model helper only when the chat is big.
+  expect(L.worthHanding('worker', 0, 'opus')).toBe(true)
+  expect(L.worthHanding('worker', 0, 'sonnet')).toBe(false)
+  expect(L.worthHanding('expert', 10_000, 'opus')).toBe(false)
+  expect(L.worthHanding('expert', 40_000, 'opus')).toBe(true)
+  const u = { input_tokens: 0, output_tokens: 10_000, cache_read_input_tokens: 500_000, cache_creation_input_tokens: 50_000 }
+  const near = (a: number, b: number) => expect(Math.abs(a - b) < 0.01).toBe(true)
+  // Sonnet helper, 25 steps, 150k Opus chat: 0.40 for the helper plus 0.19 of the chat's own work, against 2.7 in the chat.
+  const w = L.handResult(u, 'sonnet', 'opus', 25, 150_000)
+  near(w.cost, 0.5875)
+  expect(w.saved).toBeGreaterThan(1.5)
+  // Opus helper: same prices, the saving is the re-reading alone, less the helper's start-up.
+  const x = L.handResult(u, 'opus', 'opus', 25, 150_000)
+  near(x.saved, 1.875 - 0.1 - 0.1875)
+  // One step: the start-up is not paid back.
+  expect(L.handResult({ ...u, cache_read_input_tokens: 0, output_tokens: 300 }, 'opus', 'opus', 1, 60_000).saved).toBeLessThan(0)
+  let t: L.HandTally | undefined
+  for (const s of [1, -0.2, -0.2, -0.2, -0.2]) t = L.tallyHand(t, s)
+  expect(t!.paused).toBe(false) // the last five together still saved
+  t = L.tallyHand(t, -0.3)
+  expect(t!.paused).toBe(true)
+  expect(t!.n).toBe(6)
 })

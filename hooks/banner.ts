@@ -150,10 +150,11 @@ export const meterOf = (label: string, w: L.Window | undefined, now: number, dow
 }
 
 
-// "Lifetime 9.5B tokens"
-export const tokenText = (life: number | undefined) => {
+// "Lifetime 9.5B tokens", or with the chat's size "This chat 84k re-read per message · Lifetime 9.5B tokens":
+// the number that makes a message cost what it does, so a person sees when a new chat would be cheaper.
+export const tokenText = (life: number | undefined, chat?: number) => {
   const f = (n?: number) => (n === undefined ? '…' : n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n))
-  return `Lifetime ${f(life)} tokens`
+  return `${chat ? `This chat ${f(chat)} re-read per message · ` : ''}Lifetime ${f(life)} tokens`
 }
 
 

@@ -19,10 +19,24 @@ export type ApView = {
   off?: boolean // the on/off switch: off, Autopilot leaves prompts, models and effort to the engine
   prefsOpen?: boolean // the settings card (⚙ beside ＋) is expanded
   prefs?: Record<string, boolean | number> // settings: switches (true = on) and sizes in tokens (0 = never)
-  offer?: { text: string; body: string; topic: string; oldId: string; why: string } // a fresh start waiting for Start fresh / Keep going
+  offer?: { text: string; why: string; up?: boolean; focus?: string } // a shorten waiting for an answer; up: a move to a stronger model; focus: what the summary keeps
   usageDown?: boolean // usage reads keep failing: old figures show as unavailable
   update?: string // a newer version on GitHub, shown as a notice with an Update button
+  notes?: string[] // what changed since this copy's version, from GitHub's CHANGELOG.md
+  notesOpen?: boolean // the update notice's "What's new" list is expanded
   updating?: boolean
+  why?: string // Settings: the /why text, shown inline while open
+  addons?: Record<string, boolean> // add-ons by other authors: installed or not
+  addonBusy?: string // the add-on being installed right now
+  addonsAsk?: boolean // first run: offer to install the missing add-ons
+  ponytail?: boolean // the Ponytail plugin is on: Settings offers to turn it off
+  clean?: ApClean // the Clean card: scan results, then turn off, then ask to delete
+}
+
+export type ApCleanItem = { id: string; kind: 'plugin' | 'skill'; name: string; reason: string; tokens: number; pick: boolean; last?: number }
+export type ApClean = {
+  phase: 'scanning' | 'list' | 'working' | 'ask' | 'done'; items: ApCleanItem[]; notes: string[]; picked: string[]; off?: string[]; msg?: string
+  stats?: { chats: number; start: number; long: number } // this month's chats: how many, the usual start-up size, how many went past 150k
 }
 
 export type ApTodo = { text: string; done: boolean; suggested?: string } // suggested: Claude's reason, awaiting review
